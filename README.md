@@ -61,7 +61,7 @@ harvest any extra parts we need from scrap in the compeng room.
 
 ### Misc
 
-  * I guess we need an obnoxious logo?
+  * Let's add some branding! so we can make mouse better ! -Jasper-
   * LED at bottom of the shell 
 
 ##### Anything else?
