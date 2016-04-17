@@ -11,6 +11,8 @@ gyroscope/accelerometer](http://www.invensense.com/products/motion-tracking/6-ax
 
 [MPU-6050 Datasheet](https://cdn.sparkfun.com/datasheets/Components/General%20IC/PS-MPU-6000A.pdf)
 
+[MPU-6050 Registers](http://43zrtwysvxb2gf29r5o0athu.wpengine.netdna-cdn.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf)
+
 [Arduino Leonardo Overview](https://www.arduino.cc/en/Main/ArduinoBoardLeonardo)
 
 [Arduino Mouse/Keyboard Reference](https://www.arduino.cc/en/Reference/MouseKeyboard)
