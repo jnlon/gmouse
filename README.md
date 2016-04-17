@@ -68,5 +68,45 @@ harvest any extra parts we need from scrap in the compeng room.
   * I guess we need an obnoxious logo?
   * LED at bottom of the shell 
 
-##### Anything else?
+## Technical Notes
+
+### I2C with Gyroscope
+
+We can configure how the gyroscope functions by setting the values of its
+various "registers". Registers are 8-bit memory cells that reside on the chip itself.
+We can read from/write to these registers by sending the right signals 
+over I2C (with Arduino's Wire library). It's important to note that the
+mpu6050 **auto increments** the register of the values we read/write, so we can
+theoretically setup or read from the entire chip at once with a single
+transmission. See page 38 of the datasheet for a better description of how this
+works.
+
+Here is an annotated example of setting up the chip.
+
+```Wire.beginTransmission(SLAVE_ADDRESS); 
+// beginTransmission sends the I2C "START" signal. 
+// The SLAVE_ADDRESS is a value that uniquely identifies a component. 
+// The documentation for the mpu6050 says it is 110100X (104 or 105)
+
+Wire.write(REGISTER_START_ADDRESS); 
+// Select the register at REGISTER_START_ADDRESS. 
+// On the mpu6050, registers 13 through 117 are available
+// Each of these registers has a unique purpose. See the register documentation
+
+Wire.write(VALUE1); 
+// Set the value for REGISTER_START_ADDRESS
+// What each value does depends on the register, see the documentation
+
+Wire.write(VALUE2); 
+// Since the mpu6050 auto-increments the selected register, subsequent writes  
+// set the the value for the next register. So here, VALUE2 becomes the value of REGISTER_START_ADDRESS+1
+
+...
+Wire.endTransmission(true); 
+// Tell the gyroscope we are done reading/writing values 
+// by sending the I2C "STOP" message (this is why we need (true) as the paramater)```
+
+### Code Guidelines
+
+* Register values should be placed in `mpu6050_registers.h` and should be prefixed with REG_
 
