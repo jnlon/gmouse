@@ -104,7 +104,8 @@ Wire.write(VALUE2);
 ...
 Wire.endTransmission(true); 
 // Tell the gyroscope we are done reading/writing values 
-// by sending the I2C "STOP" message (this is why we need (true) as the paramater)```
+// by sending the I2C "STOP" message (this is why we need (true) as the paramater)
+```
 
 ### Code Guidelines
 
