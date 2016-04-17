@@ -15,6 +15,8 @@ gyroscope/accelerometer](http://www.invensense.com/products/motion-tracking/6-ax
 
 [Arduino Mouse/Keyboard Reference](https://www.arduino.cc/en/Reference/MouseKeyboard)
 
+[Arduino Wire Library (for i2c)](https://www.arduino.cc/en/reference/wire)
+
 ## Project Overview
 
 The goal is to create a USB mouse whose pointer has a velocity that is
