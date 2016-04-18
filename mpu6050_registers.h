@@ -1,1 +1,0 @@
-#define REG_PWR_MGMT_1 107

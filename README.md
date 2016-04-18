@@ -109,5 +109,5 @@ Wire.endTransmission(true);
 
 ### Code Guidelines
 
-* Register values should be placed in `mpu6050_registers.h` and should be prefixed with REG_
+* Register values should be placed in `mpu6050.h` and should be prefixed with REG_
 
