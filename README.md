@@ -83,7 +83,8 @@ works.
 
 Here is an annotated example of setting up the chip.
 
-```Wire.beginTransmission(SLAVE_ADDRESS); 
+```
+Wire.beginTransmission(SLAVE_ADDRESS); 
 // beginTransmission sends the I2C "START" signal. 
 // The SLAVE_ADDRESS is a value that uniquely identifies a component. 
 // The documentation for the mpu6050 says it is 110100X (104 or 105)
