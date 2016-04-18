@@ -1,24 +1,56 @@
 #include <Mouse.h>
 #include <Wire.h>
 
-#include "mpu6050_registers.h"
+#include "mpu6050.h"
 
-#define MPU_6050_ADDRESS 104
-
-//ints are two bytes
-struct gyro_state_s {
+typedef struct gyro_state_s {
   int x; 
   int y;
   int z;
+} gyro_state;
+
+enum click_state {
+  pressed,
+  released
 };
 
-typedef gyro_state_s gyro_state;
+typedef struct mouse_state_s {
+  byte velocity_x; // Left/Right speed
+  byte velocity_y; // Up/Down speed
+  bool scroll;    // Toggles scroll mode 
+  click_state mouse1;  // Left click
+  click_state mouse2;  // Right click
+} mouse_state;
 
+/* A simple function to set register values. See setup() */
 void set_register(byte reg, byte value) {
   Wire.beginTransmission(MPU_6050_ADDRESS); 
   Wire.write(reg);
   Wire.write(value); 
   Wire.endTransmission(true);
+}
+
+/* Sets the current state of the mouse. Checks to see if buttons are
+ * pressed, what the gyroscope values are, etc*/
+mouse_state get_mouse_state(gyro_state gstate) {
+
+  struct mouse_state_s mstate;
+
+  /*TODO: 
+    - Process gyroscope values (what are the ranges?), 
+    - Figure out which pins do what (ie, clicking)*/
+
+  return mstate;
+
+}
+
+/* This function is called whenever we update the cursor on the screen 
+   This is where we actually move the mouse */
+void set_cursor_state(mouse_state state) {
+
+  /*TODO: 
+    - Set Mouse.whatever() based on mouse_state */
+
 }
 
 gyro_state get_gyro_xyz() {
@@ -44,19 +76,22 @@ gyro_state get_gyro_xyz() {
 void setup() {
   
   Wire.begin();
-
-  set_register(REG_PWR_MGMT_1, B1000); // Disable temperature sensor
-  
   Serial.begin(9600);
+
+  // Disable temperature sensor 
+  set_register(REG_PWR_MGMT_1, B1000);
+
+  // Set FS_SEL to +- 2000 (this seems to reduce sensitivity)
+  set_register(REG_GYRO_CONFIG, B11000); 
+  
 }
 
 void loop() {
-  int MPU_addr = 104;
-
   gyro_state_s state = get_gyro_xyz();
   
   Serial.print("GyX = "); Serial.print(state.x);
   Serial.print(" | GyY = "); Serial.print(state.y);
   Serial.print(" | GyZ = "); Serial.println(state.z);
-  delay(333);  
+
+  delay(50);  
 }
