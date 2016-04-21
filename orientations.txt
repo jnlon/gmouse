@@ -1,0 +1,18 @@
+ This file descibes the affect on the gyroscope's readings in the following
+ configuration:
+ __________
+|          |
+|          |
+| arduino  |
+|          |
+|          |
+|          |
+|_--_______|
+  ==   ___ 
+  ||  |   | <--- MPU
+      ^^^^^ <--- pins
+
+Tilt left: Negative on X
+Tilt right: Positive on X
+Tilt forward: Positive on Y
+Tilt backward: Negative on Y
