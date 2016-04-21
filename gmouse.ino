@@ -3,16 +3,23 @@
 
 #include "mpu6050.h"
 
-typedef struct gyro_state_s {
-  int x; 
-  int y;
-  int z;
-} gyro_state;
+// We only consider values from the gyroscope larger than GYRO_THRESHOLD
+#define GYRO_THRESHOLD 1000
+#define MAX_X_MOUSE_VELOCITY 10
+#define MAX_Y_MOUSE_VELOCITY 10
+
+/* ################## Custom Types ################## */
 
 enum click_state {
   pressed,
   released
 };
+
+typedef struct gyro_state_s {
+  int x; 
+  int y;
+  int z;
+} gyro_state;
 
 typedef struct mouse_state_s {
   short velocity_x; // Left/Right speed
@@ -21,6 +28,14 @@ typedef struct mouse_state_s {
   click_state mouse1;  // Left click
   click_state mouse2;  // Right click
 } mouse_state;
+
+
+/* ################## Global Variables ################## */
+
+bool first_run = true;
+mouse_state global_mouse_state;
+
+/* ################## Functions ################## */
 
 /* A simple function to set register values. See setup() */
 void set_register(byte reg, byte value) {
@@ -44,24 +59,46 @@ mouse_state initial_mouse_state() {
   return state;
 }
 
+int sign(int number) {
+  if (number <= 0)
+    return 1;
+  else
+    return -1;
+}
+
+int gyro_change(int value) {
+  if (abs(value) > GYRO_THRESHOLD) 
+    return (1 * sign(value));
+  return 0;
+}
 
 /* Sets the current state of the mouse. Checks to see if buttons are
  * pressed, what the gyroscope values are, etc*/
-mouse_state get_mouse_state(gyro_state gstate) {
+mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
 
-  mouse_state state = initial_mouse_state();
+  /*mouse_state mstate = initial_mouse_state();*/
+
+  int change_in_x = gyro_change(gstate.x);
+  mstate.velocity_x -= change_in_x;
+
+  int change_in_y = gyro_change(gstate.y);
+  mstate.velocity_y += change_in_y;
+
+  constrain(mstate.velocity_x, 0, MAX_X_MOUSE_VELOCITY);
+  constrain(mstate.velocity_y, 0, MAX_Y_MOUSE_VELOCITY);
 
   /*TODO: 
-    - Process gyroscope values (what are the ranges?), 
     - Figure out which pins do what (ie, clicking)*/
 
-  return state;
+  return mstate;
 
 }
 
 /* This function is called whenever we update the cursor on the screen 
    This is where we actually move the mouse */
 void set_cursor_state(mouse_state state) {
+
+  Mouse.move(state.velocity_x, state.velocity_y, false);
 
   /*TODO: 
     - Set Mouse.whatever() based on mouse_state */
@@ -123,11 +160,15 @@ void print_mouse_state(mouse_state state) {
 }
 
 
+/* ################## Main Program ################## */
+
 void setup() {
   
   Wire.begin();
   Serial.begin(9600);
   Mouse.begin();
+
+  global_mouse_state = initial_mouse_state();
 
   // Disable temperature sensor 
   set_register(REG_PWR_MGMT_1, B1000);
@@ -137,11 +178,14 @@ void setup() {
 }
 
 void loop() {
+
   gyro_state gstate = get_gyro_xyz();
-  mouse_state mstate = get_mouse_state(gstate);
+  global_mouse_state = get_mouse_state(global_mouse_state, gstate);
 
-  print_gyro_state(gstate);
-  print_mouse_state(mstate);
+  //print_gyro_state(gstate);
+  print_mouse_state(global_mouse_state);
 
-  delay(50);  
+  set_cursor_state(global_mouse_state);
+
+  delay(10);  
 }
