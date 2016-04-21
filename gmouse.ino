@@ -4,7 +4,7 @@
 #include "mpu6050.h"
 
 // We only consider values from the gyroscope larger than GYRO_THRESHOLD
-#define GYRO_THRESHOLD 1000
+#define GYRO_THRESHOLD 800
 #define MAX_X_MOUSE_VELOCITY 10
 #define MAX_Y_MOUSE_VELOCITY 10
 
@@ -84,8 +84,8 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
   int change_in_y = gyro_change(gstate.y);
   mstate.velocity_y -= change_in_y;
 
-  constrain(mstate.velocity_x, 0, MAX_X_MOUSE_VELOCITY);
-  constrain(mstate.velocity_y, 0, MAX_Y_MOUSE_VELOCITY);
+  mstate.velocity_x = constrain(mstate.velocity_x, (MAX_X_MOUSE_VELOCITY*(-1)), MAX_X_MOUSE_VELOCITY);
+  mstate.velocity_y = constrain(mstate.velocity_y, (MAX_Y_MOUSE_VELOCITY*(-1)), MAX_Y_MOUSE_VELOCITY);
 
   /*TODO: 
     - Figure out which pins do what (ie, clicking)*/
