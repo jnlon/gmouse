@@ -60,7 +60,7 @@ mouse_state initial_mouse_state() {
 }
 
 int sign(int number) {
-  if (number <= 0)
+  if (number >= 0)
     return 1;
   else
     return -1;
@@ -79,10 +79,10 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
   /*mouse_state mstate = initial_mouse_state();*/
 
   int change_in_x = gyro_change(gstate.x);
-  mstate.velocity_x -= change_in_x;
+  mstate.velocity_x += change_in_x;
 
   int change_in_y = gyro_change(gstate.y);
-  mstate.velocity_y += change_in_y;
+  mstate.velocity_y -= change_in_y;
 
   constrain(mstate.velocity_x, 0, MAX_X_MOUSE_VELOCITY);
   constrain(mstate.velocity_y, 0, MAX_Y_MOUSE_VELOCITY);
