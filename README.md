@@ -58,9 +58,14 @@ position with Mouse.move().
 
 ### Button Input
 
-The mouse shell will need slots to support our switches. I have 3 of the
-thick/clicky push switches, and a bunch of slide-switches. We can probably
-harvest any extra parts we need from scrap in the compeng room.
+The mouse has 3 physical buttons:
+  * Front left and right button
+  * Left side button
+ 
+The following is the functions:
+  * Front left + right = scroll mode
+  * Side button = back button
+  * All three buttons = calibration
 
 
 ### Misc
