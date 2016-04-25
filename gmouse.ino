@@ -1,5 +1,6 @@
 #include <Mouse.h>
 #include <Wire.h>
+#include<Keyboard.h>
 
 #include "mpu6050.h"
 
@@ -7,13 +8,13 @@
 #define GYRO_THRESHOLD 800
 #define MAX_X_MOUSE_VELOCITY 10
 #define MAX_Y_MOUSE_VELOCITY 10
+#define SENSITIVITY 1
+#define STOP_THRESHOLD 3
+#define MOUSE_LEFT_CLICK_PIN 2
+#define MOUSE_RIGHT_CLICK_PIN 3
+#define MOUSE_BACK_CLICK_PIN 4
 
 /* ################## Custom Types ################## */
-
-enum click_state {
-  pressed,
-  released
-};
 
 typedef struct gyro_state_s {
   int x; 
@@ -25,8 +26,9 @@ typedef struct mouse_state_s {
   short velocity_x; // Left/Right speed
   short velocity_y; // Up/Down speed
   bool scroll;    // Toggles scroll mode 
-  click_state mouse1;  // Left click
-  click_state mouse2;  // Right click
+  int mouse_left;  // Left click
+  int mouse_right; // Right click
+  int mouse_back;  // back page
 } mouse_state;
 
 
@@ -53,8 +55,9 @@ mouse_state initial_mouse_state() {
   state.velocity_x = 0;
   state.velocity_y = 0;
   state.scroll = false;
-  state.mouse1 = released;
-  state.mouse2 = released;
+  state.mouse_left = LOW;
+  state.mouse_right = LOW;
+  state.mouse_back = LOW;
 
   return state;
 }
@@ -68,15 +71,13 @@ int sign(int number) {
 
 int gyro_change(int value) {
   if (abs(value) > GYRO_THRESHOLD) 
-    return (1 * sign(value));
+    return (SENSITIVITY * sign(value));
   return 0;
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
  * pressed, what the gyroscope values are, etc*/
 mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
-
-  /*mouse_state mstate = initial_mouse_state();*/
 
   int change_in_x = gyro_change(gstate.x);
   mstate.velocity_x += change_in_x;
@@ -87,21 +88,47 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
   mstate.velocity_x = constrain(mstate.velocity_x, (MAX_X_MOUSE_VELOCITY*(-1)), MAX_X_MOUSE_VELOCITY);
   mstate.velocity_y = constrain(mstate.velocity_y, (MAX_Y_MOUSE_VELOCITY*(-1)), MAX_Y_MOUSE_VELOCITY);
 
-  /*TODO: 
-    - Figure out which pins do what (ie, clicking)*/
+  mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
+  mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
+  mstate.mouse_back  = digitalRead(MOUSE_BACK_CLICK_PIN);  //dedicated back page key
 
   return mstate;
 
 }
 
 /* This function is called whenever we update the cursor on the screen 
-   This is where we actually move the mouse */
+   This is where we actually move/click the mouse */
 void set_cursor_state(mouse_state state) {
 
-  Mouse.move(state.velocity_x, state.velocity_y, false);
+  if (abs(state.velocity_x) <= STOP_THRESHOLD)
+    state.velocity_x = 0;
+  else
+     state.velocity_x += STOP_THRESHOLD*sign(state.velocity_x);
+  
+  if (abs(state.velocity_x) <= STOP_THRESHOLD)
+    state.velocity_y = 0;
+  else
+     state.velocity_y += STOP_THRESHOLD*sign(state.velocity_y);
 
-  /*TODO: 
-    - Set Mouse.whatever() based on mouse_state */
+ 
+  if (state.mouse_left == HIGH) 
+    Mouse.press(MOUSE_LEFT); 
+  else if (state.mouse_left == LOW) 
+    Mouse.release(MOUSE_LEFT); 
+
+  else if (state.mouse_right == HIGH)
+    Mouse.press(MOUSE_RIGHT); 
+  else if (state.mouse_right == LOW) 
+    Mouse.release(MOUSE_RIGHT); 
+
+  else if (state.mouse_back == HIGH)
+  {
+    Keyboard.press(KEY_LEFT_ALT);
+    Keyboard.press(KEY_LEFT_ARROW);
+    Keyboard.releaseAll();
+  }
+
+  Mouse.move(state.velocity_x, state.velocity_y, false);
 
 }
 
@@ -112,9 +139,9 @@ gyro_state get_gyro_xyz() {
   Wire.write(0x43);  // starting with register 0x43 (GYRO_XOUT)
   Wire.endTransmission(false);
   Wire.requestFrom(MPU_6050_ADDRESS, 6, true);  // request a total of 6 registers
-  int GyX=Wire.read()<<8|Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
-  int GyY=Wire.read()<<8|Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
-  int GyZ=Wire.read()<<8|Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+  int GyX = (Wire.read() << 8) | Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  int GyY = (Wire.read() << 8) | Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  int GyZ = (Wire.read() << 8) | Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
 
   struct gyro_state_s state;
 
@@ -134,14 +161,6 @@ void print_gyro_state(gyro_state state) {
   Serial.println("");
 }
 
-String click_to_string(click_state s) {
-  if (s == pressed)
-    return "pressed";
-  else if (s == released)
-    return "released";
-  return "?";
-}
-
 char bool_to_char(bool b) {
   if (b)
     return 'T';
@@ -151,14 +170,24 @@ char bool_to_char(bool b) {
 
 void print_mouse_state(mouse_state state) {
   Serial.println("");
-  Serial.print("velocity_x = "); Serial.println(state.velocity_x);
-  Serial.print("velocity_y = "); Serial.println(state.velocity_y);
-  Serial.print("scroll_on  = "); Serial.println(bool_to_char(state.scroll));
-  Serial.print("mouse1     = "); Serial.println(click_to_string(state.mouse1));
-  Serial.print("mouse2     = "); Serial.println(click_to_string(state.mouse2));
+  Serial.print("velocity_x  = "); Serial.println(state.velocity_x);
+  Serial.print("velocity_y  = "); Serial.println(state.velocity_y);
+  Serial.print("scroll_on   = "); Serial.println(bool_to_char(state.scroll));
+  Serial.print("mouse_left  = "); Serial.println(state.mouse_left);
+  Serial.print("mouse_right = "); Serial.println(state.mouse_right);
+  Serial.print("mouse_back  = "); Serial.println(state.mouse_back);
   Serial.println("");
 }
 
+void set_pins_mode(int mode, int pins[], int len) {
+  for (int i=0;i<len;i++)
+    pinMode(pins[i], mode);
+}
+
+void set_pins_output(int mode, int pins[], int len) {
+  for (int i=0;i<len;i++)
+    digitalWrite(pins[i], mode);
+}
 
 /* ################## Main Program ################## */
 
@@ -167,6 +196,14 @@ void setup() {
   Wire.begin();
   Serial.begin(9600);
   Mouse.begin();
+  Keyboard.begin();
+
+  // TODO: properly store these pin values, don't just hard code
+  int out_pins[] = {5, 6, 7};
+  int in_pins[] = {2, 3, 4};
+  set_pins_mode(OUTPUT, out_pins, 3);
+  set_pins_mode(INPUT, in_pins, 3);
+  set_pins_output(HIGH, out_pins, 3);
 
   global_mouse_state = initial_mouse_state();
 
@@ -178,8 +215,8 @@ void setup() {
 }
 
 void loop() {
-
   gyro_state gstate = get_gyro_xyz();
+
   global_mouse_state = get_mouse_state(global_mouse_state, gstate);
 
   //print_gyro_state(gstate);
