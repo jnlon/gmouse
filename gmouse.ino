@@ -8,11 +8,14 @@
 #define GYRO_THRESHOLD 800
 #define MAX_X_MOUSE_VELOCITY 10
 #define MAX_Y_MOUSE_VELOCITY 10
+
 #define SENSITIVITY 1
 #define STOP_THRESHOLD 3
-#define MOUSE_LEFT_CLICK_PIN 2
-#define MOUSE_RIGHT_CLICK_PIN 3
-#define MOUSE_BACK_CLICK_PIN 4
+
+#define MOUSE_SWITCH_PWR_PIN 7
+#define MOUSE_LEFT_CLICK_PIN 4
+#define MOUSE_RIGHT_CLICK_PIN 5
+#define MOUSE_BACK_CLICK_PIN 6
 
 /* ################## Custom Types ################## */
 
@@ -25,10 +28,9 @@ typedef struct gyro_state_s {
 typedef struct mouse_state_s {
   short velocity_x; // Left/Right speed
   short velocity_y; // Up/Down speed
-  bool scroll;    // Toggles scroll mode 
-  int mouse_left;  // Left click
-  int mouse_right; // Right click
-  int mouse_back;  // back page
+  int mouse_left;   // Left click
+  int mouse_right;  // Right click
+  int mouse_back;   // back page
 } mouse_state;
 
 
@@ -54,7 +56,6 @@ mouse_state initial_mouse_state() {
 
   state.velocity_x = 0;
   state.velocity_y = 0;
-  state.scroll = false;
   state.mouse_left = LOW;
   state.mouse_right = LOW;
   state.mouse_back = LOW;
@@ -161,18 +162,10 @@ void print_gyro_state(gyro_state state) {
   Serial.println("");
 }
 
-char bool_to_char(bool b) {
-  if (b)
-    return 'T';
-  else
-    return 'F';
-}
-
 void print_mouse_state(mouse_state state) {
   Serial.println("");
   Serial.print("velocity_x  = "); Serial.println(state.velocity_x);
   Serial.print("velocity_y  = "); Serial.println(state.velocity_y);
-  Serial.print("scroll_on   = "); Serial.println(bool_to_char(state.scroll));
   Serial.print("mouse_left  = "); Serial.println(state.mouse_left);
   Serial.print("mouse_right = "); Serial.println(state.mouse_right);
   Serial.print("mouse_back  = "); Serial.println(state.mouse_back);
@@ -199,11 +192,11 @@ void setup() {
   Keyboard.begin();
 
   // TODO: properly store these pin values, don't just hard code
-  int out_pins[] = {5, 6, 7};
-  int in_pins[] = {2, 3, 4};
-  set_pins_mode(OUTPUT, out_pins, 3);
+  int in_pins[] = {4, 5, 6};
   set_pins_mode(INPUT, in_pins, 3);
-  set_pins_output(HIGH, out_pins, 3);
+
+  pinMode(MOUSE_SWITCH_PWR_PIN, OUTPUT);
+  digitalWrite(MOUSE_SWITCH_PWR_PIN, HIGH);
 
   global_mouse_state = initial_mouse_state();
 
