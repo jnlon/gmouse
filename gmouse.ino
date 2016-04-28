@@ -1,16 +1,17 @@
 #include <Mouse.h>
 #include <Wire.h>
-#include<Keyboard.h>
+#include <Keyboard.h>
 
 #include "mpu6050.h"
 
 // We only consider values from the gyroscope larger than GYRO_THRESHOLD
-#define GYRO_THRESHOLD 800
-#define MAX_X_MOUSE_VELOCITY 10
-#define MAX_Y_MOUSE_VELOCITY 10
+#define GYRO_IGNORE_UNDER 50
+
+#define VELOCITY_NOTCHES 10L 
+#define GYRO_LEVEL_RANGE 200L 
 
 #define SENSITIVITY 1
-#define STOP_THRESHOLD 3
+#define STOP_THRESHOLD 0
 
 #define MOUSE_SWITCH_PWR_PIN 7
 #define MOUSE_LEFT_CLICK_PIN 4
@@ -26,23 +27,24 @@ typedef struct gyro_state_s {
 } gyro_state;
 
 typedef struct mouse_state_s {
-  short velocity_x; // Left/Right speed
-  short velocity_y; // Up/Down speed
-  int mouse_left;   // Left click
-  int mouse_right;  // Right click
-  int mouse_back;   // back page
+  long gyro_x;              // Accumulate significant gyroscope values
+  long gyro_y; 
+  int velocity_x;           // How fast/slow cursor is moving
+  int velocity_y; 
+  int mouse_left;           // Left click
+  int mouse_right;          // Right click
+  int mouse_back;           // back page
 } mouse_state;
 
 
 /* ################## Global Variables ################## */
 
-bool first_run = true;
 mouse_state global_mouse_state;
 
 /* ################## Functions ################## */
 
 /* A simple function to set register values. See setup() */
-void set_register(byte reg, byte value) {
+void set_mpu_register(byte reg, byte value) {
   Wire.beginTransmission(MPU_6050_ADDRESS); 
   Wire.write(reg);
   Wire.write(value); 
@@ -54,6 +56,8 @@ mouse_state initial_mouse_state() {
 
   mouse_state state;
 
+  state.gyro_x = 0;
+  state.gyro_y = 0;
   state.velocity_x = 0;
   state.velocity_y = 0;
   state.mouse_left = LOW;
@@ -71,15 +75,22 @@ int sign(int number) {
 }
 
 int gyro_change(int value) {
-  if (abs(value) > GYRO_THRESHOLD) 
+  if (abs(value) > GYRO_IGNORE_UNDER) 
     return (SENSITIVITY * sign(value));
   return 0;
+}
+
+long velocity_now(long gyro_value) {
+  long s = sign(gyro_value);
+  long v = abs(gyro_value);
+  return ((v / (GYRO_LEVEL_RANGE / VELOCITY_NOTCHES))*s);
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
  * pressed, what the gyroscope values are, etc*/
 mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
 
+  /*
   int change_in_x = gyro_change(gstate.x);
   mstate.velocity_x += change_in_x;
 
@@ -88,6 +99,18 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
 
   mstate.velocity_x = constrain(mstate.velocity_x, (MAX_X_MOUSE_VELOCITY*(-1)), MAX_X_MOUSE_VELOCITY);
   mstate.velocity_y = constrain(mstate.velocity_y, (MAX_Y_MOUSE_VELOCITY*(-1)), MAX_Y_MOUSE_VELOCITY);
+  */
+
+  // Log changes in gstate if over noise threshold
+  mstate.gyro_x += gyro_change(gstate.x);
+  mstate.gyro_y += gyro_change(gstate.y);
+
+  // Update the velocity
+  mstate.velocity_x = velocity_now(mstate.gyro_x);
+  mstate.velocity_y = velocity_now(mstate.gyro_y);
+
+  Serial.println(mstate.velocity_x);
+  Serial.println(mstate.velocity_y);
 
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
   mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
@@ -101,16 +124,14 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
    This is where we actually move/click the mouse */
 void set_cursor_state(mouse_state state) {
 
-  if (abs(state.velocity_x) <= STOP_THRESHOLD)
-    state.velocity_x = 0;
-  else
-     state.velocity_x += STOP_THRESHOLD*sign(state.velocity_x);
-  
-  if (abs(state.velocity_x) <= STOP_THRESHOLD)
-    state.velocity_y = 0;
-  else
-     state.velocity_y += STOP_THRESHOLD*sign(state.velocity_y);
+  int velocity_x = state.velocity_x-(STOP_THRESHOLD*sign(state.velocity_x));
+  int velocity_y = state.velocity_y-(STOP_THRESHOLD*sign(state.velocity_y));
 
+  if (abs(state.velocity_x) < STOP_THRESHOLD)
+    velocity_x = 0;
+  
+  if (abs(state.velocity_y) < STOP_THRESHOLD)
+    velocity_y = 0;
  
   if (state.mouse_left == HIGH) 
     Mouse.press(MOUSE_LEFT); 
@@ -129,8 +150,7 @@ void set_cursor_state(mouse_state state) {
     Keyboard.releaseAll();
   }
 
-  Mouse.move(state.velocity_x, state.velocity_y, false);
-
+  Mouse.move(velocity_x, velocity_y, false);
 }
 
 /* Get X/Y/Z values from the gyroscope */
@@ -164,11 +184,13 @@ void print_gyro_state(gyro_state state) {
 
 void print_mouse_state(mouse_state state) {
   Serial.println("");
-  Serial.print("velocity_x  = "); Serial.println(state.velocity_x);
-  Serial.print("velocity_y  = "); Serial.println(state.velocity_y);
-  Serial.print("mouse_left  = "); Serial.println(state.mouse_left);
-  Serial.print("mouse_right = "); Serial.println(state.mouse_right);
-  Serial.print("mouse_back  = "); Serial.println(state.mouse_back);
+  Serial.print("gyro_x             = "); Serial.println(state.gyro_x);
+  Serial.print("gyro_y             = "); Serial.println(state.gyro_y);
+  Serial.print("velocity_x         = "); Serial.println(state.velocity_x);
+  Serial.print("velocity_y         = "); Serial.println(state.velocity_y);
+  Serial.print("mouse_left         = "); Serial.println(state.mouse_left);
+  Serial.print("mouse_right        = "); Serial.println(state.mouse_right);
+  Serial.print("mouse_back         = "); Serial.println(state.mouse_back);
   Serial.println("");
 }
 
@@ -201,10 +223,10 @@ void setup() {
   global_mouse_state = initial_mouse_state();
 
   // Disable temperature sensor 
-  set_register(REG_PWR_MGMT_1, B1000);
+  set_mpu_register(REG_PWR_MGMT_1, B1000);
 
   // Set FS_SEL to +- 2000 (this seems to reduce sensitivity)
-  set_register(REG_GYRO_CONFIG, B11000); 
+  set_mpu_register(REG_GYRO_CONFIG, B11000); 
 }
 
 void loop() {
@@ -213,6 +235,7 @@ void loop() {
   global_mouse_state = get_mouse_state(global_mouse_state, gstate);
 
   //print_gyro_state(gstate);
+
   print_mouse_state(global_mouse_state);
 
   set_cursor_state(global_mouse_state);
