@@ -4,14 +4,19 @@
 
 #include "mpu6050.h"
 
-// We only consider values from the gyroscope larger than GYRO_THRESHOLD
+
+// The minimum/maximum stored gyro value in mouse_state
+#define MAX_GYRO_COUNT 80000L 
+
+// What multiple of MAX_GYRO_COUNT counts as a velocity increase
+#define GYRO_VELOCITY_MULTIPLE 9999L 
+
+// At velocity zero, how much extra gyro count we need to add to overcome ut
+#define GYRO_STOP_BUMP 5000L
+
+// We ignore gyroscope values that are too too small or too big
 #define GYRO_IGNORE_UNDER 50
-
-#define VELOCITY_NOTCHES 10L 
-#define GYRO_LEVEL_RANGE 200L 
-
-#define SENSITIVITY 1
-#define STOP_THRESHOLD 0
+#define GYRO_IGNORE_OVER (GYRO_VELOCITY_MULTIPLE*5) // ignore over 1 velocity multiple
 
 #define MOUSE_SWITCH_PWR_PIN 7
 #define MOUSE_LEFT_CLICK_PIN 4
@@ -75,42 +80,40 @@ int sign(int number) {
 }
 
 int gyro_change(int value) {
-  if (abs(value) > GYRO_IGNORE_UNDER) 
-    return (SENSITIVITY * sign(value));
+  if (abs(value) > GYRO_IGNORE_UNDER && abs(value) < GYRO_IGNORE_OVER) 
+    return (value);
   return 0;
 }
 
+boolean between(long value, long low, long high) {
+  if (value > low && value < high)
+    return true;
+  return false;
+}
+
 long velocity_now(long gyro_value) {
-  long s = sign(gyro_value);
-  long v = abs(gyro_value);
-  return ((v / (GYRO_LEVEL_RANGE / VELOCITY_NOTCHES))*s);
+  if (between(gyro_value, (-1)*GYRO_VELOCITY_MULTIPLE, GYRO_VELOCITY_MULTIPLE)) { // apply speed bump if velocity = 0
+    int direction = sign(gyro_value);
+    gyro_value -= GYRO_STOP_BUMP*direction;
+  }
+
+  return ((gyro_value / GYRO_VELOCITY_MULTIPLE));
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
  * pressed, what the gyroscope values are, etc*/
 mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
 
-  /*
-  int change_in_x = gyro_change(gstate.x);
-  mstate.velocity_x += change_in_x;
-
-  int change_in_y = gyro_change(gstate.y);
-  mstate.velocity_y -= change_in_y;
-
-  mstate.velocity_x = constrain(mstate.velocity_x, (MAX_X_MOUSE_VELOCITY*(-1)), MAX_X_MOUSE_VELOCITY);
-  mstate.velocity_y = constrain(mstate.velocity_y, (MAX_Y_MOUSE_VELOCITY*(-1)), MAX_Y_MOUSE_VELOCITY);
-  */
-
   // Log changes in gstate if over noise threshold
   mstate.gyro_x += gyro_change(gstate.x);
-  mstate.gyro_y += gyro_change(gstate.y);
+  mstate.gyro_y -= gyro_change(gstate.y);
+
+  mstate.gyro_x = constrain(mstate.gyro_x, (-1)*MAX_GYRO_COUNT, MAX_GYRO_COUNT);
+  mstate.gyro_y = constrain(mstate.gyro_y, (-1)*MAX_GYRO_COUNT, MAX_GYRO_COUNT);
 
   // Update the velocity
   mstate.velocity_x = velocity_now(mstate.gyro_x);
   mstate.velocity_y = velocity_now(mstate.gyro_y);
-
-  Serial.println(mstate.velocity_x);
-  Serial.println(mstate.velocity_y);
 
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
   mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
@@ -124,14 +127,8 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
    This is where we actually move/click the mouse */
 void set_cursor_state(mouse_state state) {
 
-  int velocity_x = state.velocity_x-(STOP_THRESHOLD*sign(state.velocity_x));
-  int velocity_y = state.velocity_y-(STOP_THRESHOLD*sign(state.velocity_y));
-
-  if (abs(state.velocity_x) < STOP_THRESHOLD)
-    velocity_x = 0;
-  
-  if (abs(state.velocity_y) < STOP_THRESHOLD)
-    velocity_y = 0;
+  long velocity_x = state.velocity_x;
+  long velocity_y = state.velocity_y;
  
   if (state.mouse_left == HIGH) 
     Mouse.press(MOUSE_LEFT); 
