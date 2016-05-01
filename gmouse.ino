@@ -123,10 +123,35 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
 
 }
 
+
+boolean reset_buttons_pressed(mouse_state state) {
+  if (state.mouse_left == HIGH && 
+      state.mouse_right == HIGH && 
+      state.mouse_back == HIGH)
+    return true;
+  else 
+    return  false;
+}
+
+boolean scroll_buttons_pressed(mouse_state state) {
+  if (state.mouse_left == HIGH && 
+      state.mouse_right == HIGH)
+    return true;
+  else 
+    return  false;
+}
+
 /* This function is called whenever we update the cursor on the screen 
    This is where we actually move/click the mouse */
 void set_cursor_state(mouse_state state) {
 
+  if (reset_buttons_pressed(state)) {
+    global_mouse_state = initial_mouse_state();
+    return;
+  }
+
+  // Paramaters passed to Mouse.move()
+  boolean scroll_mode = scroll_buttons_pressed(state);
   long velocity_x = state.velocity_x;
   long velocity_y = state.velocity_y;
  
@@ -147,7 +172,7 @@ void set_cursor_state(mouse_state state) {
     Keyboard.releaseAll();
   }
 
-  Mouse.move(velocity_x, velocity_y, false);
+  Mouse.move(velocity_x, velocity_y, scroll_mode);
 }
 
 /* Get X/Y/Z values from the gyroscope */
