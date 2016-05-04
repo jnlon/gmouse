@@ -6,17 +6,20 @@
 
 
 // The minimum/maximum stored gyro value in mouse_state
-#define MAX_GYRO_COUNT 80000L 
+#define MAX_GYRO_COUNT 500000L 
 
 // What multiple of MAX_GYRO_COUNT counts as a velocity increase
-#define GYRO_VELOCITY_MULTIPLE 9999L 
+#define GYRO_VELOCITY_MULTIPLE 100000L 
 
 // At velocity zero, how much extra gyro count we need to add to overcome ut
-#define GYRO_STOP_BUMP 5000L
+#define GYRO_STOP_BUMP 1000L
 
 // We ignore gyroscope values that are too too small or too big
-#define GYRO_IGNORE_UNDER 50
-#define GYRO_IGNORE_OVER (GYRO_VELOCITY_MULTIPLE*5) // ignore over 1 velocity multiple
+#define GYRO_IGNORE_UNDER 250
+#define GYRO_IGNORE_OVER (MAX_GYRO_COUNT*5) 
+
+// Bit-shift to lower the gyroscopes raw input
+#define GYRO_DAMPEN 5
 
 #define MOUSE_SWITCH_PWR_PIN 7
 #define MOUSE_LEFT_CLICK_PIN 4
@@ -188,9 +191,9 @@ gyro_state get_gyro_xyz() {
 
   struct gyro_state_s state;
 
-  state.x = GyX;
-  state.y = GyY;
-  state.z = GyZ;
+  state.x = GyX >> GYRO_DAMPEN;
+  state.y = GyY >> GYRO_DAMPEN;
+  state.z = GyZ >> GYRO_DAMPEN;
 
   return state;
 }
@@ -248,7 +251,14 @@ void setup() {
   set_mpu_register(REG_PWR_MGMT_1, B1000);
 
   // Set FS_SEL to +- 2000 (this seems to reduce sensitivity)
-  set_mpu_register(REG_GYRO_CONFIG, B11000); 
+  //set_mpu_register(REG_GYRO_CONFIG, B11000); 
+  set_mpu_register(REG_GYRO_CONFIG, B00000); 
+
+  // Set SMPRT_DIV (sample rate dividor) to 0 to achive a faster sample rate
+  set_mpu_register(REG_SMPRT_DIV, B0); 
+
+  // Enable DATA_RDY_EN, so that the MPU can notify use when there's new data
+  // set_mpu_register(REG_INT_ENABLE, B1);
 }
 
 void loop() {
@@ -262,5 +272,5 @@ void loop() {
 
   set_cursor_state(global_mouse_state);
 
-  delay(10);  
+  //delay(1);  
 }
