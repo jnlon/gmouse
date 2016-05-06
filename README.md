@@ -70,7 +70,7 @@ The following is the functions:
 
 ### Misc
 
-  * I guess we need an obnoxious logo?
+  * Let's add some branding! so we can make mouse better ! -Jasper-
   * LED at bottom of the shell 
 
 ## Technical Notes
