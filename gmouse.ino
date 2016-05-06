@@ -5,7 +5,9 @@
 
 #include "mpu6050.h"
 #include "i2cdevlib_mpu6050/I2Cdev.h"
-#include "i2cdevlib_mpu6050/MPU6050.h"
+#include "i2cdevlib_mpu6050/MPU6050_6Axis_MotionApps20.h"
+
+#define INTERRUPT_PIN 8
 
 // The minimum/maximum stored gyro value in mouse_state
 #define MAX_GYRO_COUNT 500000L 
@@ -50,6 +52,14 @@ typedef struct mouse_state_s {
 /* ################## Global Variables ################## */
 
 mouse_state global_mouse_state;
+int16_t gx, gy, gz;
+MPU6050 i2cdev_gyro;
+uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+void dmpDataReady() {
+    mpuInterrupt = true;
+}
 
 /* ################## Functions ################## */
 
@@ -231,14 +241,72 @@ void set_pins_output(int mode, int pins[], int len) {
     digitalWrite(pins[i], mode);
 }
 
+void print_gyro_i2cdev_state(int x, int y, int z) {
+
+  /*Serial.print(x); Serial.print("\t");
+  Serial.print(y); Serial.print("\t");
+  Serial.println(z);*/
+
+  /*mpuInterrupt = false;
+  uint16_t mpuIntStatus = i2cdev_gyro.getIntStatus();
+
+  if  (!(mpuIntStatus & 0x02))
+    return;
+    */
+
+  uint16_t fifoCount = i2cdev_gyro.getFIFOCount();
+
+  while (fifoCount < packetSize) fifoCount = i2cdev_gyro.getFIFOCount();
+
+  uint8_t fifoBuffer[64]; // FIFO storage buffer
+  i2cdev_gyro.getFIFOBytes(fifoBuffer, packetSize);
+
+  // display Euler angles in degrees
+  Quaternion q;           // [w, x, y, z]         quaternion container
+  float euler[3];         // [psi, theta, phi]    Euler angle container
+  i2cdev_gyro.dmpGetQuaternion(&q, fifoBuffer);
+  i2cdev_gyro.dmpGetEuler(euler, &q);
+
+  Serial.print("euler\t");
+  Serial.print(euler[0] * 180/M_PI);
+  Serial.print("\t");
+  Serial.print(euler[1] * 180/M_PI);
+  Serial.print("\t");
+  Serial.println(euler[2] * 180/M_PI);
+
+}
+
 /* ################## Main Program ################## */
 
 void setup() {
   
   Wire.begin();
   Serial.begin(9600);
+  while (!Serial);
   Mouse.begin();
   Keyboard.begin();
+
+  //i2cdev gyro init
+  i2cdev_gyro.initialize();
+  Serial.println(i2cdev_gyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
+  i2cdev_gyro.setDMPEnabled(true);
+
+  uint8_t devstatus = i2cdev_gyro.dmpInitialize();
+
+  i2cdev_gyro.setXGyroOffset(220);
+  i2cdev_gyro.setYGyroOffset(76);
+  i2cdev_gyro.setZGyroOffset(-85);
+  i2cdev_gyro.setZAccelOffset(1788); // 1688 factory default for my test chip
+
+  //pinMode(INTERRUPT_PIN, INPUT);
+  //attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
+
+  if (devstatus != 0)
+    Serial.println("Could not init DMP!");
+
+  Serial.print("status: ");
+  Serial.println(i2cdev_gyro.getIntStatus());
+  packetSize = i2cdev_gyro.dmpGetFIFOPacketSize();
 
   // TODO: properly store these pin values, don't just hard code
   int in_pins[] = {4, 5, 6};
@@ -250,14 +318,14 @@ void setup() {
   global_mouse_state = initial_mouse_state();
 
   // Disable temperature sensor 
-  set_mpu_register(REG_PWR_MGMT_1, B1000);
+  /*set_mpu_register(REG_PWR_MGMT_1, B1000);
 
   // Set FS_SEL to +- 2000 (this seems to reduce sensitivity)
   //set_mpu_register(REG_GYRO_CONFIG, B11000); 
   set_mpu_register(REG_GYRO_CONFIG, B00000); 
 
   // Set SMPRT_DIV (sample rate dividor) to 0 to achive a faster sample rate
-  set_mpu_register(REG_SMPRT_DIV, B0); 
+  set_mpu_register(REG_SMPRT_DIV, B0); */
 
   // Enable DATA_RDY_EN, so that the MPU can notify use when there's new data
   // set_mpu_register(REG_INT_ENABLE, B1);
@@ -267,6 +335,13 @@ void loop() {
   gyro_state gstate = get_gyro_xyz();
 
   global_mouse_state = get_mouse_state(global_mouse_state, gstate);
+
+  // wait for MPU interrupt or extra packet(s) available
+  //while (!mpuInterrupt) { }
+
+  print_gyro_i2cdev_state(0, 0, 0);
+
+  return;
 
   //print_gyro_state(gstate);
 
