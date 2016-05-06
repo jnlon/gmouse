@@ -2,8 +2,10 @@
 #include <Wire.h>
 #include <Keyboard.h>
 
-#include "mpu6050.h"
 
+#include "mpu6050.h"
+#include "i2cdevlib_mpu6050/I2Cdev.h"
+#include "i2cdevlib_mpu6050/MPU6050.h"
 
 // The minimum/maximum stored gyro value in mouse_state
 #define MAX_GYRO_COUNT 500000L 
