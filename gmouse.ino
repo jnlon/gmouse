@@ -14,17 +14,20 @@
 // At velocity zero, how much extra gyro count we need to add to overcome ut
 #define GYRO_STOP_BUMP 1000L
 
-// We ignore gyroscope values that are too too small or too big
-#define GYRO_IGNORE_UNDER 250
-#define GYRO_IGNORE_OVER (MAX_GYRO_COUNT*5) 
-
-// Bit-shift to lower the gyroscopes raw input
-#define GYRO_DAMPEN 5
-
 #define MOUSE_SWITCH_PWR_PIN 7
 #define MOUSE_LEFT_CLICK_PIN 4
 #define MOUSE_RIGHT_CLICK_PIN 5
 #define MOUSE_BACK_CLICK_PIN 6
+
+// Number of gyroscope queries before calculating change 
+#define NUMBER_OF_SAMPLES 10
+
+// Artificial delay between samples (microseconds, keep < 16383) 
+#define MICROSECONDS_BETWEEN_SAMPLES 2500.0
+#define SECONDS_ACROSS_SAMPLES ((MICROSECONDS_BETWEEN_SAMPLES/1000000.0)*(NUMBER_OF_SAMPLES-1))
+
+// Full Scale Range sensitivity (see page 31 of register spec)
+#define LSB_SENSITIVITY 131
 
 /* ################## Custom Types ################## */
 
@@ -35,8 +38,10 @@ typedef struct gyro_state_s {
 } gyro_state;
 
 typedef struct mouse_state_s {
-  long gyro_x;              // Accumulate significant gyroscope values
+  long gyro_x;             // Tilt in degrees
   long gyro_y; 
+  int degree_x;             // Tilt in degrees
+  int degree_y; 
   int velocity_x;           // How fast/slow cursor is moving
   int velocity_y; 
   int mouse_left;           // Left click
@@ -83,8 +88,6 @@ int sign(int number) {
 }
 
 int gyro_change(int value) {
-  if (abs(value) > GYRO_IGNORE_UNDER && abs(value) < GYRO_IGNORE_OVER) 
-    return (value);
   return 0;
 }
 
@@ -126,7 +129,6 @@ mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
 
 }
 
-
 boolean reset_buttons_pressed(mouse_state state) {
   if (state.mouse_left == HIGH && 
       state.mouse_right == HIGH && 
@@ -142,6 +144,49 @@ boolean scroll_buttons_pressed(mouse_state state) {
     return true;
   else 
     return  false;
+}
+
+float average(long x1, long x2)  {
+  return ((x1 + x2) / 2);
+}
+
+/* Aproximates the area under a graph of points X/Y/Z in g1 and g2, with
+   time_elapsed as the x difference. Uses simpson's method */
+gyro_state area_under_curve(gyro_state gstates[]) {
+
+  gyro_state change;
+
+  if ((NUMBER_OF_SAMPLES % 2) != 0) {
+    Serial.println("Cannot find area under curve, need even NUMBER_OF_SAMPLES!");
+    return change;
+  }
+
+  // Conventional variable names for integration
+  float a = 0;
+  float b = SECONDS_ACROSS_SAMPLES;
+  int n = NUMBER_OF_SAMPLES;
+  float x = (b - a) / n;
+
+  //Serial.print("x: "); Serial.println(x);
+
+  // Accumulate Xo and Xn
+  change.x = gstates[0].x + gstates[n].x;
+  change.y = gstates[0].y + gstates[n].y;
+  change.z = gstates[0].z + gstates[n].z;
+
+  // Apply Simpson's rule for middle terms
+  for (int i=1;i<NUMBER_OF_SAMPLES-1; i+=2) {
+    change.x += (4 * gstates[i].x) + (2 * gstates[i+1].x);
+    change.y += (4 * gstates[i].y) + (2 * gstates[i+1].y);
+    change.z += (4 * gstates[i].z) + (2 * gstates[i+1].z);
+  }
+
+  change.x = (x/3)*change.x;
+  change.y = (x/3)*change.y;
+  change.z = (x/3)*change.z;
+
+  return change;
+
 }
 
 /* This function is called whenever we update the cursor on the screen 
@@ -178,7 +223,7 @@ void set_cursor_state(mouse_state state) {
   Mouse.move(velocity_x, velocity_y, scroll_mode);
 }
 
-/* Get X/Y/Z values from the gyroscope */
+/* Get X/Y/Z values from gyroscope in degrees/s */
 gyro_state get_gyro_xyz() {
 
   Wire.beginTransmission(MPU_6050_ADDRESS);
@@ -191,9 +236,9 @@ gyro_state get_gyro_xyz() {
 
   struct gyro_state_s state;
 
-  state.x = GyX >> GYRO_DAMPEN;
-  state.y = GyY >> GYRO_DAMPEN;
-  state.z = GyZ >> GYRO_DAMPEN;
+  state.x = (GyX / LSB_SENSITIVITY);
+  state.y = (GyY / LSB_SENSITIVITY);
+  state.z = (GyZ / LSB_SENSITIVITY);
 
   return state;
 }
@@ -250,21 +295,38 @@ void setup() {
   // Disable temperature sensor 
   set_mpu_register(REG_PWR_MGMT_1, B1000);
 
-  // Set FS_SEL to +- 2000 (this seems to reduce sensitivity)
-  //set_mpu_register(REG_GYRO_CONFIG, B11000); 
+  // Set FS_SEL to +- 250 (most accurate for small readings)
   set_mpu_register(REG_GYRO_CONFIG, B00000); 
 
-  // Set SMPRT_DIV (sample rate dividor) to 0 to achive a faster sample rate
+  // Set SMPRT_DIV (sample rate divider) to 0 (8KHz)
   set_mpu_register(REG_SMPRT_DIV, B0); 
 
-  // Enable DATA_RDY_EN, so that the MPU can notify use when there's new data
-  // set_mpu_register(REG_INT_ENABLE, B1);
 }
 
-void loop() {
-  gyro_state gstate = get_gyro_xyz();
+long test = 0;
 
-  global_mouse_state = get_mouse_state(global_mouse_state, gstate);
+void loop() {
+
+  gyro_state gstates[NUMBER_OF_SAMPLES];
+
+  // Sample gyroscope X/Y/Z readings, with a pause each time 
+  for (int i=0;i<NUMBER_OF_SAMPLES;i++) {
+    gstates[i] = get_gyro_xyz();
+    if (i == NUMBER_OF_SAMPLES-1) 
+      break;
+    delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
+  }
+
+  gyro_state change = area_under_curve(gstates);
+
+  test += change.x;
+  Serial.println(test);
+
+  //print_gyro_state(change);
+
+  return;
+
+  //global_mouse_state = get_mouse_state(global_mouse_state, gstate_1);
 
   //print_gyro_state(gstate);
 
