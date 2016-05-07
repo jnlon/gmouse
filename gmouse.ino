@@ -6,24 +6,24 @@
 
 
 // The minimum/maximum stored gyro value in mouse_state
-#define MAX_GYRO_COUNT 500000L 
+#define DEGREE_MAX_RANGE 360
 
-// What multiple of MAX_GYRO_COUNT counts as a velocity increase
-#define GYRO_VELOCITY_MULTIPLE 100000L 
+// What multiple of DEGREE_MAX_RANGE counts as a velocity increase
+#define DEGREE_VELOCITY_MULTIPLE 6
 
-// At velocity zero, how much extra gyro count we need to add to overcome ut
-#define GYRO_STOP_BUMP 1000L
+// At velocity zero, how much extra gyro count we need to add to overcome it
+#define DEGREE_STOP_BUMP 0 
 
-#define MOUSE_SWITCH_PWR_PIN 7
 #define MOUSE_LEFT_CLICK_PIN 4
 #define MOUSE_RIGHT_CLICK_PIN 5
 #define MOUSE_BACK_CLICK_PIN 6
+#define MOUSE_SWITCH_PWR_PIN 7
 
-// Number of gyroscope queries before calculating change 
-#define NUMBER_OF_SAMPLES 10
+// Number of gyroscope queries before calculating change (must be even!)
+#define NUMBER_OF_SAMPLES 4
 
 // Artificial delay between samples (microseconds, keep < 16383) 
-#define MICROSECONDS_BETWEEN_SAMPLES 2500.0
+#define MICROSECONDS_BETWEEN_SAMPLES 12000.0
 #define SECONDS_ACROSS_SAMPLES ((MICROSECONDS_BETWEEN_SAMPLES/1000000.0)*(NUMBER_OF_SAMPLES-1))
 
 // Full Scale Range sensitivity (see page 31 of register spec)
@@ -38,8 +38,6 @@ typedef struct gyro_state_s {
 } gyro_state;
 
 typedef struct mouse_state_s {
-  long gyro_x;             // Tilt in degrees
-  long gyro_y; 
   int degree_x;             // Tilt in degrees
   int degree_y; 
   int velocity_x;           // How fast/slow cursor is moving
@@ -69,8 +67,8 @@ mouse_state initial_mouse_state() {
 
   mouse_state state;
 
-  state.gyro_x = 0;
-  state.gyro_y = 0;
+  state.degree_x = 0;
+  state.degree_y = 0;
   state.velocity_x = 0;
   state.velocity_y = 0;
   state.mouse_left = LOW;
@@ -87,39 +85,46 @@ int sign(int number) {
     return -1;
 }
 
-int gyro_change(int value) {
-  return 0;
-}
-
 boolean between(long value, long low, long high) {
   if (value > low && value < high)
     return true;
   return false;
 }
 
-long velocity_now(long gyro_value) {
-  if (between(gyro_value, (-1)*GYRO_VELOCITY_MULTIPLE, GYRO_VELOCITY_MULTIPLE)) { // apply speed bump if velocity = 0
-    int direction = sign(gyro_value);
-    gyro_value -= GYRO_STOP_BUMP*direction;
+long velocity_now(long value) {
+  // Apply speed bump 
+  if (between(value, (-1)*DEGREE_VELOCITY_MULTIPLE, DEGREE_VELOCITY_MULTIPLE)) {
+    int direction = sign(value);
+    value -= DEGREE_STOP_BUMP*direction;
   }
 
-  return ((gyro_value / GYRO_VELOCITY_MULTIPLE));
+  return ((value / DEGREE_VELOCITY_MULTIPLE));
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
- * pressed, what the gyroscope values are, etc*/
-mouse_state get_mouse_state(mouse_state mstate, gyro_state gstate) {
+   pressed, what the gyroscope values are, etc*/
+mouse_state get_mouse_state(mouse_state mstate, gyro_state gdegree) {
 
   // Log changes in gstate if over noise threshold
-  mstate.gyro_x += gyro_change(gstate.x);
-  mstate.gyro_y -= gyro_change(gstate.y);
+  mstate.degree_x += gdegree.x;
+  mstate.degree_y -= gdegree.y;
 
-  mstate.gyro_x = constrain(mstate.gyro_x, (-1)*MAX_GYRO_COUNT, MAX_GYRO_COUNT);
-  mstate.gyro_y = constrain(mstate.gyro_y, (-1)*MAX_GYRO_COUNT, MAX_GYRO_COUNT);
+  mstate.degree_x = constrain(mstate.degree_x, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
+  mstate.degree_y = constrain(mstate.degree_y, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
 
   // Update the velocity
-  mstate.velocity_x = velocity_now(mstate.gyro_x);
-  mstate.velocity_y = velocity_now(mstate.gyro_y);
+  mstate.velocity_x = velocity_now(mstate.degree_x);
+  mstate.velocity_y = velocity_now(mstate.degree_y);
+
+  /*
+  // Slows down (and eventually stops) the mouse when we are moving slowly
+  // TODO: Clean this up
+  if (abs(mstate.velocity_x) <= 1 && mstate.velocity_x != 0 && mstate.degree_x != 0)
+    mstate.degree_x -= 1*sign(mstate.velocity_x);
+
+  if (abs(mstate.velocity_y) <= 1 && mstate.velocity_y != 0 && mstate.degree_y != 0)
+    mstate.degree_y -= 1*sign(mstate.velocity_y);
+  */
 
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
   mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
@@ -254,8 +259,8 @@ void print_gyro_state(gyro_state state) {
 
 void print_mouse_state(mouse_state state) {
   Serial.println("");
-  Serial.print("gyro_x             = "); Serial.println(state.gyro_x);
-  Serial.print("gyro_y             = "); Serial.println(state.gyro_y);
+  Serial.print("degree_x             = "); Serial.println(state.degree_x);
+  Serial.print("degree_y             = "); Serial.println(state.degree_y);
   Serial.print("velocity_x         = "); Serial.println(state.velocity_x);
   Serial.print("velocity_y         = "); Serial.println(state.velocity_y);
   Serial.print("mouse_left         = "); Serial.println(state.mouse_left);
@@ -283,8 +288,12 @@ void setup() {
   Mouse.begin();
   Keyboard.begin();
 
-  // TODO: properly store these pin values, don't just hard code
-  int in_pins[] = {4, 5, 6};
+  int in_pins[] = { 
+    MOUSE_LEFT_CLICK_PIN, 
+    MOUSE_RIGHT_CLICK_PIN, 
+    MOUSE_BACK_CLICK_PIN 
+  };
+
   set_pins_mode(INPUT, in_pins, 3);
 
   pinMode(MOUSE_SWITCH_PWR_PIN, OUTPUT);
@@ -303,8 +312,6 @@ void setup() {
 
 }
 
-long test = 0;
-
 void loop() {
 
   gyro_state gstates[NUMBER_OF_SAMPLES];
@@ -317,16 +324,11 @@ void loop() {
     delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
   }
 
-  gyro_state change = area_under_curve(gstates);
-
-  test += change.x;
-  Serial.println(test);
+  gyro_state gyro_degree_change = area_under_curve(gstates);
 
   //print_gyro_state(change);
 
-  return;
-
-  //global_mouse_state = get_mouse_state(global_mouse_state, gstate_1);
+  global_mouse_state = get_mouse_state(global_mouse_state, gyro_degree_change);
 
   //print_gyro_state(gstate);
 
