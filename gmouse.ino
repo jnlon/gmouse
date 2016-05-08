@@ -23,11 +23,16 @@
 #define NUMBER_OF_SAMPLES 10
 
 // Artificial delay between samples (microseconds, keep < 16383) 
-#define MICROSECONDS_BETWEEN_SAMPLES 12000.0
+#define MICROSECONDS_BETWEEN_SAMPLES 1000.0
 #define SECONDS_ACROSS_SAMPLES ((MICROSECONDS_BETWEEN_SAMPLES/1000000.0)*(NUMBER_OF_SAMPLES-1))
 
 // Full Scale Range sensitivity (see page 31 of register spec)
-#define LSB_SENSITIVITY 131
+/* FS_SEL Scale Range   LSB Sensitivity 
+   0      ± 250 °/s     131 LSB/°/s  
+   1      ± 500 °/s     65.5 LSB/°/s  
+   2      ± 1000 °/s    32.8 LSB/°/s 
+   3      ± 2000 °/s    16.4 LSB/°/s */
+#define LSB_SENSITIVITY 16.4
 
 /* ################## Custom Types ################## */
 
@@ -315,14 +320,14 @@ void setup() {
   // Disable temperature sensor 
   set_mpu_register(REG_PWR_MGMT_1, B1000);
 
-  // Set FS_SEL to +- 250 (most accurate for small readings)
-  set_mpu_register(REG_GYRO_CONFIG, B00000); 
+  // Set FS_SEL to +- 2000 (maximum degree/s it can detect)
+  set_mpu_register(REG_GYRO_CONFIG, B11000); 
 
   // Set SMPRT_DIV (sample rate divider) to 0 (8KHz)
-  set_mpu_register(REG_SMPRT_DIV, B0); 
+  set_mpu_register(REG_SMPRT_DIV, B1001); 
 
   // Set DLPF_CFG in CONFIG 
-  set_mpu_register(REG_CONFIG, B111); 
+  set_mpu_register(REG_CONFIG, B000); 
 
 }
 
@@ -338,8 +343,8 @@ void loop() {
     delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
   }
 
-  //print_samples(gstates);
-  //Serial.println(' ');
+  print_samples(gstates);
+  Serial.println(' ');
 
   return;
 
