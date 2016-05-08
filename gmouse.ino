@@ -20,7 +20,7 @@
 #define MOUSE_SWITCH_PWR_PIN 7
 
 // Number of gyroscope queries before calculating change (must be even!)
-#define NUMBER_OF_SAMPLES 4
+#define NUMBER_OF_SAMPLES 10
 
 // Artificial delay between samples (microseconds, keep < 16383) 
 #define MICROSECONDS_BETWEEN_SAMPLES 12000.0
@@ -155,6 +155,16 @@ float average(long x1, long x2)  {
   return ((x1 + x2) / 2);
 }
 
+void print_samples(gyro_state *gs) {
+
+  for (int i=0;i<NUMBER_OF_SAMPLES;i++) {
+    Serial.print(gs[i].x); Serial.print(' ');
+    Serial.print(gs[i].y); Serial.print(' ');
+    Serial.print(gs[i].z); Serial.println(' ');
+  }
+
+}
+
 /* Aproximates the area under a graph of points X/Y/Z in g1 and g2, with
    time_elapsed as the x difference. Uses simpson's method */
 gyro_state area_under_curve(gyro_state gstates[]) {
@@ -172,7 +182,8 @@ gyro_state area_under_curve(gyro_state gstates[]) {
   int n = NUMBER_OF_SAMPLES;
   float x = (b - a) / n;
 
-  //Serial.print("x: "); Serial.println(x);
+  Serial.print("x: "); Serial.println(x, 8);
+  Serial.print("x/3.0: "); Serial.println(x/3.0f, 8);
 
   // Accumulate Xo and Xn
   change.x = gstates[0].x + gstates[n].x;
@@ -310,6 +321,9 @@ void setup() {
   // Set SMPRT_DIV (sample rate divider) to 0 (8KHz)
   set_mpu_register(REG_SMPRT_DIV, B0); 
 
+  // Set DLPF_CFG in CONFIG 
+  set_mpu_register(REG_CONFIG, B111); 
+
 }
 
 void loop() {
@@ -323,6 +337,11 @@ void loop() {
       break;
     delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
   }
+
+  //print_samples(gstates);
+  //Serial.println(' ');
+
+  return;
 
   gyro_state gyro_degree_change = area_under_curve(gstates);
 
