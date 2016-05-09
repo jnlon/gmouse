@@ -10,7 +10,7 @@
 #define DEGREE_MAX_RANGE 360
 
 // What multiple of DEGREE_MAX_RANGE counts as a velocity increase
-#define DEGREE_VELOCITY_MULTIPLE 6
+#define DEGREE_VELOCITY_MULTIPLE 3
 
 // At velocity zero, how much extra gyro count we need to add to overcome it
 #define DEGREE_STOP_BUMP 0 
@@ -25,11 +25,11 @@
 
 // Artificial delay between samples (microseconds, keep < 16383) 
 #define MICROSECONDS_BETWEEN_SAMPLES 1000.0
-#define SECONDS_ACROSS_SAMPLES ((MICROSECONDS_BETWEEN_SAMPLES/1000000.0)*(NUMBER_OF_SAMPLES-1))
+#define SECONDS_ACROSS_SAMPLES ((MICROSECONDS_BETWEEN_SAMPLES/1000000)*(NUMBER_OF_SAMPLES-1))
 
 // Full Scale Range sensitivity (see page 31 of register spec)
 #define GYRO_LSB_SENSITIVITY 16.4
-#define ACCEL_LSB_SENSITIVITY 16384
+#define ACCEL_LSB_SENSITIVITY 2048
 
 /* ################## Custom Types ################## */
 
@@ -208,18 +208,27 @@ sensor_data area_under_curve(sensor_data gstates[]) {
     change.gy += (4 * gstates[i].gy) + (2 * gstates[i+1].gy);
     change.gz += (4 * gstates[i].gz) + (2 * gstates[i+1].gz);
 
-    change.ax += (4 * gstates[i].ax) + (2 * gstates[i+1].ax);
-    change.ay += (4 * gstates[i].ay) + (2 * gstates[i+1].ay);
-    change.az += (4 * gstates[i].az) + (2 * gstates[i+1].az);
+    change.ax += gstates[i].ax + gstates[i+1].ax;
+    change.ay += gstates[i].ay + gstates[i+1].ay;
+    change.az += gstates[i].az + gstates[i+1].az;
+
+    //change.ax += (4 * gstates[i].ax) + (2 * gstates[i+1].ax);
+    //change.ay += (4 * gstates[i].ay) + (2 * gstates[i+1].ay);
+    //change.az += (4 * gstates[i].az) + (2 * gstates[i+1].az);
   }
 
   change.gx = (x/3)*change.gx;
   change.gy = (x/3)*change.gy;
   change.gz = (x/3)*change.gz;
 
-  change.ax = (x/3)*change.ax;
+  change.ax /= n;
+  change.ay /= n;
+  change.az /= n;
+
+  /*change.ax = (x/3)*change.ax;
   change.ay = (x/3)*change.ay;
   change.az = (x/3)*change.az;
+  */
   
 
   return change;
@@ -385,14 +394,13 @@ void loop() {
 
   //X/Y
   float yAcc = atan2f((float)change.gy, (float)change.gz) * 180 / M_PI;
-  //Serial.print("before: "); Serial.println(gyro_degree_change.gy);
-  change.gy = change.gy * 0.98 + yAcc * 0.02;
+  change.gy = change.gy * 0.95 + yAcc * 0.05;
 
   float xAcc = atan2f((float)change.gx, (float)change.gz) * 180 / M_PI;
-  Serial.print("before: "); Serial.println(change.gy);
-  change.gx = change.gx * 0.98 + xAcc * 0.02;
-  Serial.print("yacc: "); Serial.println(yAcc);
-  Serial.print("after: "); Serial.println(change.gy);
+  Serial.print("before: "); Serial.println(change.gx);
+  change.gx = change.gx * 0.95 + xAcc * 0.05;
+  Serial.print("xacc: "); Serial.println(xAcc);
+  Serial.print("after: "); Serial.println(change.gx);
 
   //return;
 
