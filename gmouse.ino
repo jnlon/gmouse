@@ -160,14 +160,20 @@ float average(long x1, long x2)  {
   return ((x1 + x2) / 2);
 }
 
-void print_gyro_samples(sensor_data *gs) {
+void print_accel_samples(sensor_data *gs) {
+  for (int i=0;i<NUMBER_OF_SAMPLES;i++) {
+    Serial.print(gs[i].ax); Serial.print(' ');
+    Serial.print(gs[i].ay); Serial.print(' ');
+    Serial.print(gs[i].az); Serial.println(' ');
+  }
+}
 
+void print_gyro_samples(sensor_data *gs) {
   for (int i=0;i<NUMBER_OF_SAMPLES;i++) {
     Serial.print(gs[i].gx); Serial.print(' ');
     Serial.print(gs[i].gy); Serial.print(' ');
     Serial.print(gs[i].gz); Serial.println(' ');
   }
-
 }
 
 /* Aproximates the area under a graph of points X/Y/Z in g1 and g2, with
@@ -382,10 +388,10 @@ void loop() {
     delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
   }
 
-  //print_gyro_samples(gstates);
+  print_accel_samples(gstates);
   //Serial.println(' ');
 
-  //return;
+  return;
 
   sensor_data change = area_under_curve(gstates);
 
