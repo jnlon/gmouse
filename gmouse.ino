@@ -187,16 +187,16 @@ gyro_state area_under_curve(gyro_state gstates[]) {
   int n = NUMBER_OF_SAMPLES;
   float x = (b - a) / n;
 
-  Serial.print("x: "); Serial.println(x, 8);
-  Serial.print("x/3.0: "); Serial.println(x/3.0f, 8);
+  //Serial.print("x: "); Serial.println(x, 8);
+  //Serial.print("x/3.0: "); Serial.println(x/3.0f, 8);
 
   // Accumulate Xo and Xn
-  change.x = gstates[0].x + gstates[n].x;
-  change.y = gstates[0].y + gstates[n].y;
-  change.z = gstates[0].z + gstates[n].z;
+  change.x = gstates[0].x + gstates[n-1].x;
+  change.y = gstates[0].y + gstates[n-1].y;
+  change.z = gstates[0].z + gstates[n-1].z;
 
   // Apply Simpson's rule for middle terms
-  for (int i=1;i<NUMBER_OF_SAMPLES-1; i+=2) {
+  for (int i=1;i<NUMBER_OF_SAMPLES-2; i+=2) {
     change.x += (4 * gstates[i].x) + (2 * gstates[i+1].x);
     change.y += (4 * gstates[i].y) + (2 * gstates[i+1].y);
     change.z += (4 * gstates[i].z) + (2 * gstates[i+1].z);
@@ -343,10 +343,10 @@ void loop() {
     delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
   }
 
-  print_samples(gstates);
-  Serial.println(' ');
+  //print_samples(gstates);
+  //Serial.println(' ');
 
-  return;
+  //return;
 
   gyro_state gyro_degree_change = area_under_curve(gstates);
 
