@@ -88,7 +88,7 @@ boolean between(long value, long low, long high) {
 }
 
 int velocity_from_degree(int degree, int direction) {
-  return (degree / (DEGREE_VELOCITY_MULTIPLE + (EXTRA_DEGREE_BUMP*direction)));
+  return ((degree + (EXTRA_DEGREE_BUMP*direction)) / (DEGREE_VELOCITY_MULTIPLE));
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
