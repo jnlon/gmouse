@@ -3,6 +3,7 @@
 
 /* Registers */
 #define REG_PWR_MGMT_1 107
+#define REG_ACCEL_CONFIG 28
 #define REG_GYRO_CONFIG 27
 #define REG_CONFIG 26
 #define REG_SMPRT_DIV 25

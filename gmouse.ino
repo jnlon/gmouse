@@ -1,6 +1,7 @@
 #include <Mouse.h>
 #include <Wire.h>
 #include <Keyboard.h>
+#include <math.h>
 
 #include "mpu6050.h"
 
@@ -27,20 +28,19 @@
 #define SECONDS_ACROSS_SAMPLES ((MICROSECONDS_BETWEEN_SAMPLES/1000000.0)*(NUMBER_OF_SAMPLES-1))
 
 // Full Scale Range sensitivity (see page 31 of register spec)
-/* FS_SEL Scale Range   LSB Sensitivity 
-   0      ± 250 °/s     131 LSB/°/s  
-   1      ± 500 °/s     65.5 LSB/°/s  
-   2      ± 1000 °/s    32.8 LSB/°/s 
-   3      ± 2000 °/s    16.4 LSB/°/s */
-#define LSB_SENSITIVITY 16.4
+#define GYRO_LSB_SENSITIVITY 16.4
+#define ACCEL_LSB_SENSITIVITY 16384
 
 /* ################## Custom Types ################## */
 
-typedef struct gyro_state_s {
-  int x; 
-  int y;
-  int z;
-} gyro_state;
+typedef struct sensor_data_s {
+  int gx; 
+  int gy;
+  int gz;
+  int ax; 
+  int ay;
+  int az;
+} sensor_data;
 
 typedef struct mouse_state_s {
   int degree_x;             // Tilt in degrees
@@ -108,11 +108,11 @@ long velocity_now(long value) {
 
 /* Sets the current state of the mouse. Checks to see if buttons are
    pressed, what the gyroscope values are, etc*/
-mouse_state get_mouse_state(mouse_state mstate, gyro_state gdegree) {
+mouse_state get_mouse_state(mouse_state mstate, sensor_data gdegree) {
 
   // Log changes in gstate if over noise threshold
-  mstate.degree_x += gdegree.x;
-  mstate.degree_y -= gdegree.y;
+  mstate.degree_x += gdegree.gx;
+  mstate.degree_y -= gdegree.gy;
 
   mstate.degree_x = constrain(mstate.degree_x, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
   mstate.degree_y = constrain(mstate.degree_y, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
@@ -160,21 +160,21 @@ float average(long x1, long x2)  {
   return ((x1 + x2) / 2);
 }
 
-void print_samples(gyro_state *gs) {
+void print_gyro_samples(sensor_data *gs) {
 
   for (int i=0;i<NUMBER_OF_SAMPLES;i++) {
-    Serial.print(gs[i].x); Serial.print(' ');
-    Serial.print(gs[i].y); Serial.print(' ');
-    Serial.print(gs[i].z); Serial.println(' ');
+    Serial.print(gs[i].gx); Serial.print(' ');
+    Serial.print(gs[i].gy); Serial.print(' ');
+    Serial.print(gs[i].gz); Serial.println(' ');
   }
 
 }
 
 /* Aproximates the area under a graph of points X/Y/Z in g1 and g2, with
    time_elapsed as the x difference. Uses simpson's method */
-gyro_state area_under_curve(gyro_state gstates[]) {
+sensor_data area_under_curve(sensor_data gstates[]) {
 
-  gyro_state change;
+  sensor_data change;
 
   if ((NUMBER_OF_SAMPLES % 2) != 0) {
     Serial.println("Cannot find area under curve, need even NUMBER_OF_SAMPLES!");
@@ -187,24 +187,40 @@ gyro_state area_under_curve(gyro_state gstates[]) {
   int n = NUMBER_OF_SAMPLES;
   float x = (b - a) / n;
 
-  Serial.print("x: "); Serial.println(x, 8);
-  Serial.print("x/3.0: "); Serial.println(x/3.0f, 8);
+  //Serial.print("x: "); Serial.println(x, 8);
+  //Serial.print("ax "); Serial.println(gstates[0].ax, 8);
+  //Serial.print("ax "); Serial.println(gstates[n-1].ax, 8);
 
   // Accumulate Xo and Xn
-  change.x = gstates[0].x + gstates[n].x;
-  change.y = gstates[0].y + gstates[n].y;
-  change.z = gstates[0].z + gstates[n].z;
+  change.gx = gstates[0].gx + gstates[n-1].gx;
+  change.gy = gstates[0].gy + gstates[n-1].gy;
+  change.gz = gstates[0].gz + gstates[n-1].gz;
+
+  change.ax = gstates[0].ax + gstates[n-1].ax;
+  change.ay = gstates[0].ay + gstates[n-1].ay;
+  change.az = gstates[0].az + gstates[n-1].az;
+  
 
   // Apply Simpson's rule for middle terms
-  for (int i=1;i<NUMBER_OF_SAMPLES-1; i+=2) {
-    change.x += (4 * gstates[i].x) + (2 * gstates[i+1].x);
-    change.y += (4 * gstates[i].y) + (2 * gstates[i+1].y);
-    change.z += (4 * gstates[i].z) + (2 * gstates[i+1].z);
+  for (int i=1;i<NUMBER_OF_SAMPLES-2; i+=2) {
+    //Serial.print("ax "); Serial.println(gstates[i].ax, 8);
+    change.gx += (4 * gstates[i].gx) + (2 * gstates[i+1].gx);
+    change.gy += (4 * gstates[i].gy) + (2 * gstates[i+1].gy);
+    change.gz += (4 * gstates[i].gz) + (2 * gstates[i+1].gz);
+
+    change.ax += (4 * gstates[i].ax) + (2 * gstates[i+1].ax);
+    change.ay += (4 * gstates[i].ay) + (2 * gstates[i+1].ay);
+    change.az += (4 * gstates[i].az) + (2 * gstates[i+1].az);
   }
 
-  change.x = (x/3)*change.x;
-  change.y = (x/3)*change.y;
-  change.z = (x/3)*change.z;
+  change.gx = (x/3)*change.gx;
+  change.gy = (x/3)*change.gy;
+  change.gz = (x/3)*change.gz;
+
+  change.ax = (x/3)*change.ax;
+  change.ay = (x/3)*change.ay;
+  change.az = (x/3)*change.az;
+  
 
   return change;
 
@@ -244,32 +260,44 @@ void set_cursor_state(mouse_state state) {
   Mouse.move(velocity_x, velocity_y, scroll_mode);
 }
 
-/* Get X/Y/Z values from gyroscope in degrees/s */
-gyro_state get_gyro_xyz() {
+/* Get X/Y/Z values from gyroscope (degrees/s) and accelerometer */
+sensor_data get_gyro_accel_xyz() {
 
   Wire.beginTransmission(MPU_6050_ADDRESS);
-  Wire.write(0x43);  // starting with register 0x43 (GYRO_XOUT)
+  Wire.write(0x3B);  // starting with register 3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
-  Wire.requestFrom(MPU_6050_ADDRESS, 6, true);  // request a total of 6 registers
-  int GyX = (Wire.read() << 8) | Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
-  int GyY = (Wire.read() << 8) | Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
-  int GyZ = (Wire.read() << 8) | Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+  Wire.requestFrom(MPU_6050_ADDRESS, 14, true);  // request a total of 14 registers
+  int Ax = (Wire.read() << 8) | Wire.read();  // 0x43 (ACCEL_XOUT_H) & 0x44 (ACCEL_XOUT_L)
+  int Ay = (Wire.read() << 8) | Wire.read();  // 0x45 (ACCEL_YOUT_H) & 0x46 (ACCEL_YOUT_L)
+  int Az = (Wire.read() << 8) | Wire.read();  // 0x47 (ACCEL_ZOUT_H) & 0x48 (ACCEL_ZOUT_L)
+  Wire.read() ; Wire.read();                  // Ignore temperature readings
+  int Gx = (Wire.read() << 8) | Wire.read();  // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  int Gy = (Wire.read() << 8) | Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  int Gz = (Wire.read() << 8) | Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
 
-  struct gyro_state_s state;
+  struct sensor_data_s state;
 
-  state.x = (GyX / LSB_SENSITIVITY);
-  state.y = (GyY / LSB_SENSITIVITY);
-  state.z = (GyZ / LSB_SENSITIVITY);
+  state.ax = (Ax / ACCEL_LSB_SENSITIVITY);
+  state.ay = (Ay / ACCEL_LSB_SENSITIVITY);
+  state.az = (Az / ACCEL_LSB_SENSITIVITY);
+
+  state.gx = (Gx / GYRO_LSB_SENSITIVITY);
+  state.gy = (Gy / GYRO_LSB_SENSITIVITY);
+  state.gz = (Gz / GYRO_LSB_SENSITIVITY);
 
   return state;
 }
 
 
 /* Print the state of the gyroscope */
-void print_gyro_state(gyro_state state) {
-  Serial.print("GyX = "); Serial.print(state.x);
-  Serial.print(" | GyY = "); Serial.print(state.y);
-  Serial.print(" | GyZ = "); Serial.print(state.z);
+void print_sensor_data(sensor_data state) {
+  Serial.print("Ax = "); Serial.print(state.ax);
+  Serial.print(" | Ay = "); Serial.print(state.ay);
+  Serial.print(" | Az = "); Serial.print(state.az);
+  Serial.println("");
+  Serial.print("Gx = "); Serial.print(state.gx);
+  Serial.print(" | Gy = "); Serial.print(state.gy);
+  Serial.print(" | Gz = "); Serial.print(state.gz);
   Serial.println("");
 }
 
@@ -320,41 +348,59 @@ void setup() {
   // Disable temperature sensor 
   set_mpu_register(REG_PWR_MGMT_1, B1000);
 
-  // Set FS_SEL to +- 2000 (maximum degree/s it can detect)
+  // Set FS_SEL to +- 2000 degree/s (maximum it can detect)
   set_mpu_register(REG_GYRO_CONFIG, B11000); 
 
-  // Set SMPRT_DIV (sample rate divider) to 0 (8KHz)
+  // Set AFS_SEL to +- 2g 
+  set_mpu_register(REG_ACCEL_CONFIG, B00000); 
+
+  // Set SMPRT_DIV (sample rate divider) 1000HZ/(9 + 1)
   set_mpu_register(REG_SMPRT_DIV, B1001); 
 
   // Set DLPF_CFG in CONFIG 
-  set_mpu_register(REG_CONFIG, B000); 
-
+  set_mpu_register(REG_CONFIG, B001); 
 }
 
 void loop() {
 
-  gyro_state gstates[NUMBER_OF_SAMPLES];
+  sensor_data gstates[NUMBER_OF_SAMPLES];
 
   // Sample gyroscope X/Y/Z readings, with a pause each time 
   for (int i=0;i<NUMBER_OF_SAMPLES;i++) {
-    gstates[i] = get_gyro_xyz();
+    gstates[i] = get_gyro_accel_xyz();
     if (i == NUMBER_OF_SAMPLES-1) 
       break;
     delayMicroseconds(MICROSECONDS_BETWEEN_SAMPLES);
   }
 
-  print_samples(gstates);
-  Serial.println(' ');
+  //print_gyro_samples(gstates);
+  //Serial.println(' ');
 
-  return;
+  //return;
 
-  gyro_state gyro_degree_change = area_under_curve(gstates);
+  sensor_data change = area_under_curve(gstates);
 
-  //print_gyro_state(change);
+  //int force_magnitude_approx = abs(gyro_degree_change.gx) + abs(gyro_degree_change.gy) + abs(gyro_degree_change.gz);
+  //Serial.println(force_magnitude_approx);
 
-  global_mouse_state = get_mouse_state(global_mouse_state, gyro_degree_change);
+  //X/Y
+  float yAcc = atan2f((float)change.gy, (float)change.gz) * 180 / M_PI;
+  //Serial.print("before: "); Serial.println(gyro_degree_change.gy);
+  change.gy = change.gy * 0.98 + yAcc * 0.02;
 
-  //print_gyro_state(gstate);
+  float xAcc = atan2f((float)change.gx, (float)change.gz) * 180 / M_PI;
+  Serial.print("before: "); Serial.println(change.gy);
+  change.gx = change.gx * 0.98 + xAcc * 0.02;
+  Serial.print("yacc: "); Serial.println(yAcc);
+  Serial.print("after: "); Serial.println(change.gy);
+
+  //return;
+
+  print_sensor_data(change);
+
+  global_mouse_state = get_mouse_state(global_mouse_state, change);
+
+  //print_sensor_data(gstate);
 
   print_mouse_state(global_mouse_state);
 
