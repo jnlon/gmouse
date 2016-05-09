@@ -5,15 +5,15 @@
 
 #include "mpu6050.h"
 
-
 // The minimum/maximum stored gyro value in mouse_state
 #define DEGREE_MAX_RANGE 360
 
 // What multiple of DEGREE_MAX_RANGE counts as a velocity increase
-#define DEGREE_VELOCITY_MULTIPLE 15
+#define DEGREE_VELOCITY_MULTIPLE 30
 
-// At velocity zero, how much extra gyro count we need to add to overcome it
-#define DEGREE_STOP_BUMP 5
+// How much we have to go past a velocity multiple, in that direction, to
+// increment velocity. This prevents jitter from hand-shaking
+#define EXTRA_DEGREE_BUMP 5
 
 #define MOUSE_LEFT_CLICK_PIN 4
 #define MOUSE_RIGHT_CLICK_PIN 5
@@ -87,38 +87,27 @@ boolean between(long value, long low, long high) {
   return false;
 }
 
-int velocity_from_degree(int value) {
-  if (between(value, (-1)*DEGREE_VELOCITY_MULTIPLE, DEGREE_VELOCITY_MULTIPLE)) {
-    int direction = sign(value);
-    value -= DEGREE_STOP_BUMP*direction;
-  }
-  return ((value / DEGREE_VELOCITY_MULTIPLE));
+int velocity_from_degree(int degree, int direction) {
+  return (degree / (DEGREE_VELOCITY_MULTIPLE + (EXTRA_DEGREE_BUMP*direction)));
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
    pressed, what the gyroscope values are, etc*/
 mouse_state get_mouse_state(mouse_state mstate, degree_xy degree) {
 
-  // Log changes in gstate if over noise threshold
-  //mstate.degree_x += gdegree.gx;
-  //mstate.degree_y -= gdegree.gy;
+  // What orientation we were at last time we were here
+  int old_degree_x = mstate.degree_x;
+  int old_degree_y = mstate.degree_y;
 
   mstate.degree_x = constrain(degree.x, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
   mstate.degree_y = constrain(degree.y, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
 
+  int direction_x = old_degree_x - mstate.degree_x;
+  int direction_y = old_degree_y - mstate.degree_y;
+
   // Update the velocity
-  mstate.velocity_x = velocity_from_degree(mstate.degree_x);
-  mstate.velocity_y = velocity_from_degree(mstate.degree_y);
-
-  /*
-  // Slows down (and eventually stops) the mouse when we are moving slowly
-  // TODO: Clean this up
-  if (abs(mstate.velocity_x) <= 1 && mstate.velocity_x != 0 && mstate.degree_x != 0)
-    mstate.degree_x -= 1*sign(mstate.velocity_x);
-
-  if (abs(mstate.velocity_y) <= 1 && mstate.velocity_y != 0 && mstate.degree_y != 0)
-    mstate.degree_y -= 1*sign(mstate.velocity_y);
-  */
+  mstate.velocity_x = velocity_from_degree(mstate.degree_x, sign(direction_x));
+  mstate.velocity_y = velocity_from_degree(mstate.degree_y, sign(direction_y));
 
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
   mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
@@ -143,10 +132,6 @@ boolean scroll_buttons_pressed(mouse_state state) {
     return true;
   else 
     return  false;
-}
-
-float average(long x1, long x2)  {
-  return ((x1 + x2) / 2);
 }
 
 /* This function is called whenever we update the cursor on the screen 
@@ -183,7 +168,7 @@ void set_cursor_state(mouse_state state) {
   Mouse.move(velocity_x, velocity_y, scroll_mode);
 }
 
-/* Get X/Y/Z values from gyroscope (degrees/s) and accelerometer */
+/* Get X/Y/Z values from the accelerometer */
 sensor_data get_degree_xyz() {
 
   Wire.beginTransmission(MPU_6050_ADDRESS);
@@ -204,6 +189,7 @@ sensor_data get_degree_xyz() {
   return state;
 }
 
+/* Convert raw accelerometer data to degree */
 degree_xy degree_from_accel(sensor_data data) {
 
   degree_xy degree;
@@ -215,7 +201,7 @@ degree_xy degree_from_accel(sensor_data data) {
   return degree;
 }
 
-/* Print the state of the gyroscope */
+/* Print the state of the accelerometer */
 void print_sensor_data(sensor_data state) {
   Serial.print("Ax = "); Serial.print(state.ax);
   Serial.print(" | Ay = "); Serial.print(state.ay);
@@ -249,11 +235,13 @@ void set_pins_output(int mode, int pins[], int len) {
 
 void setup() {
   
+  // Initialize libraries
   Wire.begin();
   Serial.begin(9600);
   Mouse.begin();
   Keyboard.begin();
 
+  // Setup pins
   int in_pins[] = { 
     MOUSE_LEFT_CLICK_PIN, 
     MOUSE_RIGHT_CLICK_PIN, 
@@ -261,10 +249,10 @@ void setup() {
   };
 
   set_pins_mode(INPUT, in_pins, 3);
-
   pinMode(MOUSE_SWITCH_PWR_PIN, OUTPUT);
   digitalWrite(MOUSE_SWITCH_PWR_PIN, HIGH);
 
+  // Setup global variables
   global_mouse_state = initial_mouse_state();
 
   // Disable temperature sensor 
@@ -281,28 +269,22 @@ void setup() {
 
   // Set DLPF_CFG in CONFIG 
   set_mpu_register(REG_CONFIG, B001); 
+
+  
 }
 
 void loop() {
 
+  // Get raw XYZ values from accelerometer
   sensor_data accel_state = get_degree_xyz();
 
-  //print_sensor_data(accel_state);
+  degree_xy degrees_now = degree_from_accel(accel_state);
 
-  degree_xy degree = degree_from_accel(accel_state);
+  // print_sensor_data(change);
 
-  /*Serial.print("x: "); Serial.print(degree.x);
-  Serial.print(" y: "); Serial.println(degree.y);
+  global_mouse_state = get_mouse_state(global_mouse_state, degrees_now);
 
-  Serial.print("vx: "); Serial.print(velocity_from_degree(degree.x));
-  Serial.print(" vy: "); Serial.println(velocity_from_degree(degree.y));
-  */
-
-  //print_sensor_data(change);
-
-  global_mouse_state = get_mouse_state(global_mouse_state, degree);
-
-  //print_sensor_data(gstate);
+  // print_sensor_data(gstate);
 
   print_mouse_state(global_mouse_state);
 
