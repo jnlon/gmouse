@@ -10,10 +10,10 @@
 #define DEGREE_MAX_RANGE 360
 
 // What multiple of DEGREE_MAX_RANGE counts as a velocity increase
-#define DEGREE_VELOCITY_MULTIPLE 3
+#define DEGREE_VELOCITY_MULTIPLE 15
 
 // At velocity zero, how much extra gyro count we need to add to overcome it
-#define DEGREE_STOP_BUMP 0 
+#define DEGREE_STOP_BUMP 5
 
 #define MOUSE_LEFT_CLICK_PIN 4
 #define MOUSE_RIGHT_CLICK_PIN 5
@@ -34,8 +34,8 @@ typedef struct degree_xy_s {
 } degree_xy;
 
 typedef struct mouse_state_s {
-  int accel_x;             // Tilt in degrees
-  int accel_y; 
+  int degree_x;              // Tilt in degrees
+  int degree_y; 
   int velocity_x;           // How fast/slow cursor is moving
   int velocity_y; 
   int mouse_left;           // Left click
@@ -63,8 +63,8 @@ mouse_state initial_mouse_state() {
 
   mouse_state state;
 
-  state.accel_x = 0;
-  state.accel_y = 0;
+  state.degree_x = 0;
+  state.degree_y = 0;
   state.velocity_x = 0;
   state.velocity_y = 0;
   state.mouse_left = LOW;
@@ -87,39 +87,37 @@ boolean between(long value, long low, long high) {
   return false;
 }
 
-long velocity_now(long value) {
-  // Apply speed bump 
+int velocity_from_degree(int value) {
   if (between(value, (-1)*DEGREE_VELOCITY_MULTIPLE, DEGREE_VELOCITY_MULTIPLE)) {
     int direction = sign(value);
     value -= DEGREE_STOP_BUMP*direction;
   }
-
   return ((value / DEGREE_VELOCITY_MULTIPLE));
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
    pressed, what the gyroscope values are, etc*/
-mouse_state get_mouse_state(mouse_state mstate, sensor_data sensors) {
+mouse_state get_mouse_state(mouse_state mstate, degree_xy degree) {
 
   // Log changes in gstate if over noise threshold
-  //mstate.accel_x += gdegree.gx;
-  //mstate.accel_y -= gdegree.gy;
+  //mstate.degree_x += gdegree.gx;
+  //mstate.degree_y -= gdegree.gy;
 
-  mstate.accel_x = constrain(mstate.accel_x, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
-  mstate.accel_y = constrain(mstate.accel_y, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
+  mstate.degree_x = constrain(degree.x, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
+  mstate.degree_y = constrain(degree.y, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
 
   // Update the velocity
-  mstate.velocity_x = velocity_now(mstate.accel_x);
-  mstate.velocity_y = velocity_now(mstate.accel_y);
+  mstate.velocity_x = velocity_from_degree(mstate.degree_x);
+  mstate.velocity_y = velocity_from_degree(mstate.degree_y);
 
   /*
   // Slows down (and eventually stops) the mouse when we are moving slowly
   // TODO: Clean this up
-  if (abs(mstate.velocity_x) <= 1 && mstate.velocity_x != 0 && mstate.accel_x != 0)
-    mstate.accel_x -= 1*sign(mstate.velocity_x);
+  if (abs(mstate.velocity_x) <= 1 && mstate.velocity_x != 0 && mstate.degree_x != 0)
+    mstate.degree_x -= 1*sign(mstate.velocity_x);
 
-  if (abs(mstate.velocity_y) <= 1 && mstate.velocity_y != 0 && mstate.accel_y != 0)
-    mstate.accel_y -= 1*sign(mstate.velocity_y);
+  if (abs(mstate.velocity_y) <= 1 && mstate.velocity_y != 0 && mstate.degree_y != 0)
+    mstate.degree_y -= 1*sign(mstate.velocity_y);
   */
 
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
@@ -185,27 +183,23 @@ void set_cursor_state(mouse_state state) {
   Mouse.move(velocity_x, velocity_y, scroll_mode);
 }
 
-sensor_data raw_accel_to_degrees(sensor_data d) {
-
-
-}
-
 /* Get X/Y/Z values from gyroscope (degrees/s) and accelerometer */
-sensor_data get_accel_xyz() {
+sensor_data get_degree_xyz() {
 
   Wire.beginTransmission(MPU_6050_ADDRESS);
   Wire.write(0x3B);  // starting with register 3B (ACCEL_XOUT_H)
   Wire.endTransmission(false);
   Wire.requestFrom(MPU_6050_ADDRESS, 6, true);  // request a total of 14 registers
-  int A1 = (Wire.read() << 8) | Wire.read();  // 0x43 (ACCEL_XOUT_H) & 0x44 (ACCEL_XOUT_L)
-  int A2 = (Wire.read() << 8) | Wire.read();  // 0x45 (ACCEL_YOUT_H) & 0x46 (ACCEL_YOUT_L)
-  int A3 = (Wire.read() << 8) | Wire.read();  // 0x47 (ACCEL_ZOUT_H) & 0x48 (ACCEL_ZOUT_L)
+  int Ax_raw = (Wire.read() << 8) | Wire.read();  // 0x43 (ACCEL_XOUT_H) & 0x44 (ACCEL_XOUT_L)
+  int Ay_raw = (Wire.read() << 8) | Wire.read();  // 0x45 (ACCEL_YOUT_H) & 0x46 (ACCEL_YOUT_L)
+  int Az_raw = (Wire.read() << 8) | Wire.read();  // 0x47 (ACCEL_ZOUT_H) & 0x48 (ACCEL_ZOUT_L)
 
   struct sensor_data_s state;
 
-  state.ax = A3;
-  state.ay = A1;
-  state.az = A2;
+  // Relative to how we orient it, see orienttions.txt
+  state.ax = Az_raw;
+  state.ay = Ax_raw;
+  state.az = Ay_raw;
 
   return state;
 }
@@ -214,14 +208,12 @@ degree_xy degree_from_accel(sensor_data data) {
 
   degree_xy degree;
 
+  // TODO: Make this simpler
   degree.x = ((((data.ax / 100)*10)/2)-90)*((-1)*sign(data.az));
   degree.y = ((data.ay / 100)*10)/2;
 
   return degree;
 }
-
-
-
 
 /* Print the state of the gyroscope */
 void print_sensor_data(sensor_data state) {
@@ -233,8 +225,8 @@ void print_sensor_data(sensor_data state) {
 
 void print_mouse_state(mouse_state state) {
   Serial.println("");
-  Serial.print("accel_x             = "); Serial.println(state.accel_x);
-  Serial.print("accel_y             = "); Serial.println(state.accel_y);
+  Serial.print("degree_x             = "); Serial.println(state.degree_x);
+  Serial.print("degree_y             = "); Serial.println(state.degree_y);
   Serial.print("velocity_x         = "); Serial.println(state.velocity_x);
   Serial.print("velocity_y         = "); Serial.println(state.velocity_y);
   Serial.print("mouse_left         = "); Serial.println(state.mouse_left);
@@ -293,21 +285,22 @@ void setup() {
 
 void loop() {
 
-  sensor_data accel_state = get_accel_xyz();
+  sensor_data accel_state = get_degree_xyz();
 
   //print_sensor_data(accel_state);
 
   degree_xy degree = degree_from_accel(accel_state);
 
-  Serial.print("x: "); Serial.print(degree.x);
+  /*Serial.print("x: "); Serial.print(degree.x);
   Serial.print(" y: "); Serial.println(degree.y);
 
-
-  return;
+  Serial.print("vx: "); Serial.print(velocity_from_degree(degree.x));
+  Serial.print(" vy: "); Serial.println(velocity_from_degree(degree.y));
+  */
 
   //print_sensor_data(change);
 
-  global_mouse_state = get_mouse_state(global_mouse_state, accel_state);
+  global_mouse_state = get_mouse_state(global_mouse_state, degree);
 
   //print_sensor_data(gstate);
 
