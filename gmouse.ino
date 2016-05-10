@@ -13,7 +13,7 @@
 
 // How much we have to go past a velocity multiple, in that direction, to
 // increment velocity. This prevents jitter from hand-shaking
-#define EXTRA_DEGREE_BUMP 5
+//#define EXTRA_DEGREE_BUMP 6
 
 #define MOUSE_LEFT_CLICK_PIN 4
 #define MOUSE_RIGHT_CLICK_PIN 5
@@ -88,7 +88,8 @@ boolean between(long value, long low, long high) {
 }
 
 int velocity_from_degree(int degree, int direction) {
-  return ((degree + (EXTRA_DEGREE_BUMP*direction)) / (DEGREE_VELOCITY_MULTIPLE));
+  //return ((degree + (EXTRA_DEGREE_BUMP*direction)) / (DEGREE_VELOCITY_MULTIPLE));
+  return ((degree / (DEGREE_VELOCITY_MULTIPLE)));
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
@@ -234,6 +235,8 @@ void set_pins_output(int mode, int pins[], int len) {
 /* ################## Main Program ################## */
 
 void setup() {
+
+  //while (!Serial) {}
   
   // Initialize libraries
   Wire.begin();
@@ -261,8 +264,8 @@ void setup() {
   // Set FS_SEL to +- 2000 degree/s (maximum it can detect)
   set_mpu_register(REG_GYRO_CONFIG, B11000); 
 
-  // Set AFS_SEL to +- 2g 
-  set_mpu_register(REG_ACCEL_CONFIG, B11000); 
+  // Set AFS_SEL to +- 16g 
+  set_mpu_register(REG_ACCEL_CONFIG, B00000); 
 
   // Set SMPRT_DIV (sample rate divider) 1000HZ/(9 + 1)
   set_mpu_register(REG_SMPRT_DIV, B1001); 
@@ -278,9 +281,19 @@ void loop() {
   // Get raw XYZ values from accelerometer
   sensor_data accel_state = get_degree_xyz();
 
-  degree_xy degrees_now = degree_from_accel(accel_state);
+  //print_sensor_data(accel_state);
 
-  // print_sensor_data(change);
+  int x = 2000;
+
+  int n = map(map(accel_state.ax, 0, 16000, 0, x), 0, x, x, 0);
+
+  Serial.println(n*sign(accel_state.az));
+  //Serial.print("z: ");
+  //Serial.println(accel_state.az);
+
+  return;
+
+  degree_xy degrees_now = degree_from_accel(accel_state);
 
   global_mouse_state = get_mouse_state(global_mouse_state, degrees_now);
 
@@ -290,5 +303,5 @@ void loop() {
 
   set_cursor_state(global_mouse_state);
 
-  //delay(1);  
+  delay(200);  
 }
