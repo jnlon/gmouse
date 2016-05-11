@@ -5,16 +5,6 @@
 
 #include "mpu6050.h"
 
-// The minimum/maximum stored gyro value in mouse_state
-#define DEGREE_MAX_RANGE 360
-
-// What multiple of DEGREE_MAX_RANGE counts as a velocity increase
-#define DEGREE_VELOCITY_MULTIPLE 30
-
-// How much we have to go past a velocity multiple, in that direction, to
-// increment velocity. This prevents jitter from hand-shaking
-//#define EXTRA_DEGREE_BUMP 6
-
 #define MOUSE_LEFT_CLICK_PIN 4
 #define MOUSE_RIGHT_CLICK_PIN 5
 #define MOUSE_BACK_CLICK_PIN 6
@@ -22,20 +12,13 @@
 
 /* ################## Custom Types ################## */
 
-typedef struct sensor_data_s {
-  int ax; 
-  int ay;
-  int az;
-} sensor_data;
-
-typedef struct degree_xy_s {
+typedef struct xyz_s {
   int x; 
   int y;
-} degree_xy;
+  int z;
+} xyz;
 
 typedef struct mouse_state_s {
-  int degree_x;              // Tilt in degrees
-  int degree_y; 
   int velocity_x;           // How fast/slow cursor is moving
   int velocity_y; 
   int mouse_left;           // Left click
@@ -63,8 +46,6 @@ mouse_state initial_mouse_state() {
 
   mouse_state state;
 
-  state.degree_x = 0;
-  state.degree_y = 0;
   state.velocity_x = 0;
   state.velocity_y = 0;
   state.mouse_left = LOW;
@@ -81,38 +62,61 @@ int sign(int number) {
     return -1;
 }
 
+ 
 boolean between(long value, long low, long high) {
   if (value > low && value < high)
     return true;
   return false;
 }
 
-int velocity_from_degree(int degree, int direction) {
-  //return ((degree + (EXTRA_DEGREE_BUMP*direction)) / (DEGREE_VELOCITY_MULTIPLE));
-  return ((degree / (DEGREE_VELOCITY_MULTIPLE)));
+/* Given a raw accelerometer value v, returns a scaled down version that we can
+   use as a velocity for the mouse cursor */
+xyz mouse_velocity_from_accel(xyz accel) {
+
+  xyz velocity; 
+  velocity.z = -1; 
+
+  // TODO: define these values, don't hard-code!
+  int velrange = 6;
+  int gyrrange = 16000;
+
+  // Y velocity
+  velocity.y = map(map(accel.y, -gyrrange+200, gyrrange-200, 0, 5000), 0, 5000, -velrange, velrange);
+
+  // X velocity
+  velocity.x = map(map(accel.x, 0, gyrrange, 0, 5000), 5000, 0, 0, velrange);
+  velocity.x *= sign(accel.z);
+
+  return velocity;
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
    pressed, what the gyroscope values are, etc*/
-mouse_state get_mouse_state(mouse_state mstate, degree_xy degree) {
+mouse_state get_mouse_state(mouse_state mstate, xyz raw_accel) {
 
-  // What orientation we were at last time we were here
-  int old_degree_x = mstate.degree_x;
-  int old_degree_y = mstate.degree_y;
+  // Update velocity
+  xyz velocity = mouse_velocity_from_accel(raw_accel);
+  int old_vx = mstate.velocity_x;
+  int old_vy = mstate.velocity_y;
 
-  mstate.degree_x = constrain(degree.x, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
-  mstate.degree_y = constrain(degree.y, (-1)*DEGREE_MAX_RANGE, DEGREE_MAX_RANGE);
-
-  int direction_x = old_degree_x - mstate.degree_x;
-  int direction_y = old_degree_y - mstate.degree_y;
-
-  // Update the velocity
-  mstate.velocity_x = velocity_from_degree(mstate.degree_x, sign(direction_x));
-  mstate.velocity_y = velocity_from_degree(mstate.degree_y, sign(direction_y));
+  // Implement velocity axis lock
+  if (old_vx == 0 && old_vy == 0) {
+    if (velocity.x != 0) 
+      mstate.velocity_x = velocity.x;
+    else 
+      mstate.velocity_y = velocity.y;
+  }
+  else if (old_vx != 0)
+    mstate.velocity_x = velocity.x;
+  else if (old_vy != 0)
+    mstate.velocity_y = velocity.y;
 
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
   mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
   mstate.mouse_back  = digitalRead(MOUSE_BACK_CLICK_PIN);  //dedicated back page key
+
+  print_xyz("raw_accel", raw_accel);
+  print_xyz("velocity", velocity);
 
   return mstate;
 
@@ -170,7 +174,7 @@ void set_cursor_state(mouse_state state) {
 }
 
 /* Get X/Y/Z values from the accelerometer */
-sensor_data get_degree_xyz() {
+xyz get_accel_xyz() {
 
   Wire.beginTransmission(MPU_6050_ADDRESS);
   Wire.write(0x3B);  // starting with register 3B (ACCEL_XOUT_H)
@@ -180,40 +184,27 @@ sensor_data get_degree_xyz() {
   int Ay_raw = (Wire.read() << 8) | Wire.read();  // 0x45 (ACCEL_YOUT_H) & 0x46 (ACCEL_YOUT_L)
   int Az_raw = (Wire.read() << 8) | Wire.read();  // 0x47 (ACCEL_ZOUT_H) & 0x48 (ACCEL_ZOUT_L)
 
-  struct sensor_data_s state;
+  xyz accel_state;
 
   // Relative to how we orient it, see orienttions.txt
-  state.ax = Az_raw;
-  state.ay = Ax_raw;
-  state.az = Ay_raw;
+  accel_state.x = Az_raw;
+  accel_state.y = Ax_raw;
+  accel_state.z = Ay_raw;
 
-  return state;
-}
-
-/* Convert raw accelerometer data to degree */
-degree_xy degree_from_accel(sensor_data data) {
-
-  degree_xy degree;
-
-  // TODO: Make this simpler
-  degree.x = ((((data.ax / 100)*10)/2)-90)*((-1)*sign(data.az));
-  degree.y = ((data.ay / 100)*10)/2;
-
-  return degree;
+  return accel_state;
 }
 
 /* Print the state of the accelerometer */
-void print_sensor_data(sensor_data state) {
-  Serial.print("Ax = "); Serial.print(state.ax);
-  Serial.print(" | Ay = "); Serial.print(state.ay);
-  Serial.print(" | Az = "); Serial.print(state.az);
+void print_xyz(String what, xyz state) {
+  Serial.print(what); Serial.print(" | ");
+  Serial.print("x = "); Serial.print(state.x);
+  Serial.print(" | y = "); Serial.print(state.y);
+  Serial.print(" | z = "); Serial.print(state.z);
   Serial.println("");
 }
 
 void print_mouse_state(mouse_state state) {
   Serial.println("");
-  Serial.print("degree_x             = "); Serial.println(state.degree_x);
-  Serial.print("degree_y             = "); Serial.println(state.degree_y);
   Serial.print("velocity_x         = "); Serial.println(state.velocity_x);
   Serial.print("velocity_y         = "); Serial.println(state.velocity_y);
   Serial.print("mouse_left         = "); Serial.println(state.mouse_left);
@@ -232,12 +223,11 @@ void set_pins_output(int mode, int pins[], int len) {
     digitalWrite(pins[i], mode);
 }
 
+
 /* ################## Main Program ################## */
 
 void setup() {
 
-  //while (!Serial) {}
-  
   // Initialize libraries
   Wire.begin();
   Serial.begin(9600);
@@ -272,36 +262,22 @@ void setup() {
 
   // Set DLPF_CFG in CONFIG 
   set_mpu_register(REG_CONFIG, B001); 
-
   
 }
 
 void loop() {
 
   // Get raw XYZ values from accelerometer
-  sensor_data accel_state = get_degree_xyz();
+  xyz accel_state = get_accel_xyz();
 
-  //print_sensor_data(accel_state);
+  //print_xyz("accelero", accel_state);
+  //degree_xy degrees_now = degree_from_accel(accel_state);
 
-  int x = 2000;
+  global_mouse_state = get_mouse_state(global_mouse_state, accel_state);
 
-  int n = map(map(accel_state.ax, 0, 16000, 0, x), 0, x, x, 0);
-
-  Serial.println(n*sign(accel_state.az));
-  //Serial.print("z: ");
-  //Serial.println(accel_state.az);
-
-  return;
-
-  degree_xy degrees_now = degree_from_accel(accel_state);
-
-  global_mouse_state = get_mouse_state(global_mouse_state, degrees_now);
-
-  // print_sensor_data(gstate);
-
-  print_mouse_state(global_mouse_state);
+  //print_mouse_state(global_mouse_state);
 
   set_cursor_state(global_mouse_state);
 
-  delay(200);  
+  delayMicroseconds(2000);  
 }
