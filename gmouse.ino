@@ -10,6 +10,11 @@
 #define MOUSE_BACK_CLICK_PIN 6
 #define MOUSE_SWITCH_PWR_PIN 7
 
+#define LED_PWR_PIN 9
+#define LED_RED_PIN 10
+#define LED_GREEN_PIN 11
+#define LED_BLUE_PIN 12
+
 /* ################## Custom Types ################## */
 
 typedef struct xyz_s {
@@ -26,9 +31,9 @@ typedef struct mouse_state_s {
   int mouse_back;           // back page
 } mouse_state;
 
-
 /* ################## Global Variables ################## */
 
+int all_led_color_pins[] = {LED_RED_PIN, LED_GREEN_PIN, LED_BLUE_PIN};
 mouse_state global_mouse_state;
 
 /* ################## Functions ################## */
@@ -69,6 +74,12 @@ boolean between(long value, long low, long high) {
   return false;
 }
 
+void enable_led_pin(int pin) {
+  for (int i=0;i<3;i++)
+    digitalWrite(all_led_color_pins[i], LOW);
+  digitalWrite(pin, HIGH);
+}
+
 /* Given a raw accelerometer value v, returns a scaled down version that we can
    use as a velocity for the mouse cursor */
 xyz mouse_velocity_from_accel(xyz accel) {
@@ -91,7 +102,7 @@ xyz mouse_velocity_from_accel(xyz accel) {
 }
 
 /* Sets the current state of the mouse. Checks to see if buttons are
-   pressed, what the gyroscope values are, etc*/
+   pressed, what the accelerometer values are, etc*/
 mouse_state get_mouse_state(mouse_state mstate, xyz raw_accel) {
 
   // Update velocity
@@ -218,12 +229,6 @@ void set_pins_mode(int mode, int pins[], int len) {
     pinMode(pins[i], mode);
 }
 
-void set_pins_output(int mode, int pins[], int len) {
-  for (int i=0;i<len;i++)
-    digitalWrite(pins[i], mode);
-}
-
-
 /* ################## Main Program ################## */
 
 void setup() {
@@ -241,9 +246,17 @@ void setup() {
     MOUSE_BACK_CLICK_PIN 
   };
 
+  // Set which pins are input/output
   set_pins_mode(INPUT, in_pins, 3);
+  set_pins_mode(OUTPUT, all_led_color_pins, 3);
+
+  // Enable pwr to mouse switches
   pinMode(MOUSE_SWITCH_PWR_PIN, OUTPUT);
   digitalWrite(MOUSE_SWITCH_PWR_PIN, HIGH);
+
+  // Enable pwr to LED
+  pinMode(LED_PWR_PIN, OUTPUT);
+  digitalWrite(LED_PWR_PIN, HIGH);
 
   // Setup global variables
   global_mouse_state = initial_mouse_state();
