@@ -60,6 +60,16 @@ mouse_state initial_mouse_state() {
   return state;
 }
 
+void update_led(mouse_state state) {
+
+  if (state.velocity_x != 0)      // X must be moving
+    enable_led_pin(LED_GREEN_PIN);
+  else if (state.velocity_y != 0) // Y must be moving
+    enable_led_pin(LED_BLUE_PIN);
+  else                            // Either both, or neither are moving
+    enable_led_pin(LED_RED_PIN); 
+}
+
 int sign(int number) {
   if (number >= 0)
     return 1;
@@ -67,7 +77,6 @@ int sign(int number) {
     return -1;
 }
 
- 
 boolean between(long value, long low, long high) {
   if (value > low && value < high)
     return true;
@@ -159,7 +168,9 @@ void set_cursor_state(mouse_state state) {
     return;
   }
 
-  // Paramaters passed to Mouse.move()
+  update_led(state);
+
+  // Parameters passed to Mouse.move()
   boolean scroll_mode = scroll_buttons_pressed(state);
   long velocity_x = state.velocity_x;
   long velocity_y = state.velocity_y;
@@ -197,7 +208,7 @@ xyz get_accel_xyz() {
 
   xyz accel_state;
 
-  // Relative to how we orient it, see orienttions.txt
+  // Relative to how we orient it, see orientations.txt
   accel_state.x = Az_raw;
   accel_state.y = Ax_raw;
   accel_state.z = Ay_raw;
