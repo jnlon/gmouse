@@ -35,6 +35,9 @@ typedef struct mouse_state_s {
 
 int all_led_color_pins[] = {LED_RED_PIN, LED_GREEN_PIN, LED_BLUE_PIN};
 mouse_state global_mouse_state;
+boolean mouse_left_down = false;
+boolean mouse_right_down = false;
+boolean mouse_back_down = false;
 
 /* ################## Functions ################## */
 
@@ -175,21 +178,33 @@ void set_cursor_state(mouse_state state) {
   long velocity_x = state.velocity_x;
   long velocity_y = state.velocity_y;
  
-  if (state.mouse_left == HIGH) 
+  if (state.mouse_left == HIGH && mouse_left_down == false) { 
     Mouse.press(MOUSE_LEFT); 
-  else if (state.mouse_left == LOW) 
+    mouse_left_down = true;
+  }
+  else if (state.mouse_left == LOW && mouse_left_down == true)  {
     Mouse.release(MOUSE_LEFT); 
+    mouse_left_down = false;
+  }
 
-  else if (state.mouse_right == HIGH)
+  if (state.mouse_right == HIGH && mouse_right_down == false) {
     Mouse.press(MOUSE_RIGHT); 
-  else if (state.mouse_right == LOW) 
+    mouse_right_down = true;
+  }
+  else if (state.mouse_right == LOW && mouse_right_down == true) {
     Mouse.release(MOUSE_RIGHT); 
+    mouse_right_down = false;
+  }
 
-  else if (state.mouse_back == HIGH)
+  if (state.mouse_back == HIGH && (mouse_back_down) == false)
   {
     Keyboard.press(KEY_LEFT_ALT);
     Keyboard.press(KEY_LEFT_ARROW);
     Keyboard.releaseAll();
+    mouse_back_down = true;
+  }
+  else if (state.mouse_back == LOW && mouse_back_down == true) {
+    mouse_back_down = false;
   }
 
   Mouse.move(velocity_x, velocity_y, scroll_mode);
@@ -299,7 +314,7 @@ void loop() {
 
   global_mouse_state = get_mouse_state(global_mouse_state, accel_state);
 
-  //print_mouse_state(global_mouse_state);
+  print_mouse_state(global_mouse_state);
 
   set_cursor_state(global_mouse_state);
 
