@@ -1,6 +1,6 @@
 # gmouse
 This repo contains the Arduino code for a highschool computer engineering
-project. The goal is to create a USB mouse controlled via gyroscopic rotation
+project. The goal is to create a USB mouse controlled via angular displacement 
 with an [Arduino Leonardo](https://www.arduino.cc/en/Main/arduinoBoardLeonardo)
 and an [MPU 6050
 gyroscope/accelerometer](http://www.invensense.com/products/motion-tracking/6-axis/mpu-6050/)
@@ -39,6 +39,8 @@ computer via a USB cable.
 
 ### Gyroscope
 
+**Update**: The accelerometer works much better for our use that the gyroscope, see the section below
+
 The MPU-6050 seems to return values corresponding to the orientation of the
 device relative to it's previous sampling state (can this be configured?). When
 motionless, it returns values for x/y/z ranging between about negative 500 to
@@ -49,6 +51,14 @@ to, for example, natural disturbances or slight wrist/arm shaking.
 The main loop will involve fetching and processing the gyroscope's values,
 updating the x/y internal velocity variables, and finally updating the mouse's
 position with Mouse.move().
+
+### Accelerometer
+
+The MPU-6050 has a built in accelerometer that is accessible from register
+0x3B. It returns values that consistantly correspond to the orientation of the
+device relative to the ground (due force of gravity). This discovery saves us
+from having to apply something a Kalman filter to our gyroscope values or
+integrate them over time.
 
 ### Ergonomics
 
@@ -67,15 +77,17 @@ The following is the functions:
   * Side button = back button
   * All three buttons = calibration
 
-
 ### Misc
 
-  * I guess we need an obnoxious logo?
-  * LED at bottom of the shell 
+  * As a last minute addition, we've added an RGB LED that changes colour
+    depending on the current velocity of the cursor
+    *Red = stop
+    *Blue = cursor moving up/down
+    *Green = cursor moving left/right
 
 ## Technical Notes
 
-### I2C with Gyroscope
+### I2C with Gyroscope/Accelerometer
 
 We can configure how the gyroscope functions by setting the values of its
 various "registers". Registers are 8-bit memory cells that reside on the chip itself.
