@@ -17,6 +17,7 @@
 
 /* ################## Custom Types ################## */
 
+/* Generic triple-int structure */
 typedef struct xyz_s {
   int x; 
   int y;
@@ -35,13 +36,15 @@ typedef struct mouse_state_s {
 
 int all_led_color_pins[] = {LED_RED_PIN, LED_GREEN_PIN, LED_BLUE_PIN};
 mouse_state global_mouse_state;
+
+/* Temporary hack to prevent spamming clicks */
 boolean mouse_left_down = false;
 boolean mouse_right_down = false;
 boolean mouse_back_down = false;
 
 /* ################## Functions ################## */
 
-/* A simple function to set register values. See setup() */
+/* A function to set register values. See setup() and i2c wire docs */
 void set_mpu_register(byte reg, byte value) {
   Wire.beginTransmission(MPU_6050_ADDRESS); 
   Wire.write(reg);
@@ -63,7 +66,8 @@ mouse_state initial_mouse_state() {
   return state;
 }
 
-void update_led(mouse_state state) {
+/* Sets the LED's colour based on velocity */
+void update_led_colour(mouse_state state) {
 
   if (state.velocity_x != 0)      // X must be moving
     enable_led_pin(LED_GREEN_PIN);
@@ -73,6 +77,7 @@ void update_led(mouse_state state) {
     enable_led_pin(LED_RED_PIN); 
 }
 
+/* Gets the sign of a number (returns -1 if negative, 1 if positive) */
 int sign(int number) {
   if (number >= 0)
     return 1;
@@ -80,12 +85,14 @@ int sign(int number) {
     return -1;
 }
 
+/* Is the value between numbers low and high? */
 boolean between(long value, long low, long high) {
   if (value > low && value < high)
     return true;
   return false;
 }
 
+/* Powers the specified pin, setting the color of our LED */
 void enable_led_pin(int pin) {
   for (int i=0;i<3;i++)
     digitalWrite(all_led_color_pins[i], LOW);
@@ -96,10 +103,12 @@ void enable_led_pin(int pin) {
    use as a velocity for the mouse cursor */
 xyz mouse_velocity_from_accel(xyz accel) {
 
+  /* TODO: #define some of these constants!
+     TODO: This is really ugly, especially the double map(), make it nicer! */
+
   xyz velocity; 
   velocity.z = -1; 
 
-  // TODO: define these values, don't hard-code!
   int velrange = 6;
   int gyrrange = 16000;
 
@@ -134,6 +143,7 @@ mouse_state get_mouse_state(mouse_state mstate, xyz raw_accel) {
   else if (old_vy != 0)
     mstate.velocity_y = velocity.y;
 
+  // Check to see if mouse buttons have been clicked (they will return HIGH)
   mstate.mouse_left  = digitalRead(MOUSE_LEFT_CLICK_PIN);  //left
   mstate.mouse_right = digitalRead(MOUSE_RIGHT_CLICK_PIN); //right
   mstate.mouse_back  = digitalRead(MOUSE_BACK_CLICK_PIN);  //dedicated back page key
@@ -145,6 +155,7 @@ mouse_state get_mouse_state(mouse_state mstate, xyz raw_accel) {
 
 }
 
+/* Checks to see if the reset buttons are pressed */
 boolean reset_buttons_pressed(mouse_state state) {
   if (state.mouse_left == HIGH && 
       state.mouse_right == HIGH && 
@@ -154,6 +165,7 @@ boolean reset_buttons_pressed(mouse_state state) {
     return  false;
 }
 
+/* Checks to see if the scroll buttons are pressed */
 boolean scroll_buttons_pressed(mouse_state state) {
   if (state.mouse_left == HIGH && 
       state.mouse_right == HIGH)
@@ -171,13 +183,12 @@ void set_cursor_state(mouse_state state) {
     return;
   }
 
-  update_led(state);
-
   // Parameters passed to Mouse.move()
   boolean scroll_mode = scroll_buttons_pressed(state);
   long velocity_x = state.velocity_x;
   long velocity_y = state.velocity_y;
  
+  // Check for clicking
   if (state.mouse_left == HIGH && mouse_left_down == false) { 
     Mouse.press(MOUSE_LEFT); 
     mouse_left_down = true;
@@ -207,6 +218,7 @@ void set_cursor_state(mouse_state state) {
     mouse_back_down = false;
   }
 
+  // Finally, move the cursor!
   Mouse.move(velocity_x, velocity_y, scroll_mode);
 }
 
@@ -240,6 +252,7 @@ void print_xyz(String what, xyz state) {
   Serial.println("");
 }
 
+/* Print the state of the mouse structure */
 void print_mouse_state(mouse_state state) {
   Serial.println("");
   Serial.print("velocity_x         = "); Serial.println(state.velocity_x);
@@ -250,6 +263,7 @@ void print_mouse_state(mouse_state state) {
   Serial.println("");
 }
 
+/* Set the pinMode of an array of pins */
 void set_pins_mode(int mode, int pins[], int len) {
   for (int i=0;i<len;i++)
     pinMode(pins[i], mode);
@@ -286,6 +300,9 @@ void setup() {
 
   // Setup global variables
   global_mouse_state = initial_mouse_state();
+  mouse_left_down = false;
+  mouse_right_down = false;
+  mouse_back_down = false;
 
   // Disable temperature sensor 
   set_mpu_register(REG_PWR_MGMT_1, B1000);
@@ -309,13 +326,15 @@ void loop() {
   // Get raw XYZ values from accelerometer
   xyz accel_state = get_accel_xyz();
 
-  //print_xyz("accelero", accel_state);
-  //degree_xy degrees_now = degree_from_accel(accel_state);
-
+  // Get the state of the mouse
   global_mouse_state = get_mouse_state(global_mouse_state, accel_state);
 
   print_mouse_state(global_mouse_state);
 
+  // Update the LED color based on cursor velocity
+  update_led_colour(global_mouse_state);
+
+  // Move the mouse cursor
   set_cursor_state(global_mouse_state);
 
   delayMicroseconds(2000);  
