@@ -39,7 +39,7 @@ computer via a USB cable.
 
 ### Gyroscope
 
-**Update**: The accelerometer works much better for our use that the gyroscope, see the section below
+**Update**: The accelerometer works much better for our use than the gyroscope, see the section below
 
 The MPU-6050 seems to return values corresponding to the orientation of the
 device relative to it's previous sampling state (can this be configured?). When
@@ -56,9 +56,9 @@ position with Mouse.move().
 
 The MPU-6050 has a built in accelerometer that is accessible from register
 0x3B. It returns values that consistantly correspond to the orientation of the
-device relative to the ground (due force of gravity). This discovery saves us
-from having to apply something a Kalman filter to our gyroscope values or
-integrate them over time.
+device relative to the ground (due to the force of gravity and its components).
+This discovery saves us from having to apply something a Kalman filter to our
+gyroscope values or integrate them over time.
 
 ### Ergonomics
 
